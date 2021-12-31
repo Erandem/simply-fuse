@@ -5,9 +5,6 @@ use std::ffi::{OsStr, OsString};
 
 pub type DirChildren = HashMap<OsString, INode>;
 
-#[derive(Debug)]
-pub struct File {}
-
 #[derive(Debug, Default)]
 pub struct Directory {
     children: DirChildren,
@@ -39,13 +36,13 @@ impl<'a> Iterator for DirIter<'a> {
 }
 
 #[derive(Debug)]
-pub struct INodeEntry {
+pub struct INodeEntry<F> {
     parent: Option<INode>,
-    kind: INodeKind,
+    kind: INodeKind<F>,
 }
 
-impl INodeEntry {
-    pub fn new_directory(parent: INode, children: Option<DirChildren>) -> INodeEntry {
+impl<F> INodeEntry<F> {
+    pub fn new_directory(parent: INode, children: Option<DirChildren>) -> INodeEntry<F> {
         INodeEntry {
             parent: Some(parent),
             kind: INodeKind::Directory(Directory {
@@ -54,7 +51,7 @@ impl INodeEntry {
         }
     }
 
-    pub fn kind(&self) -> &INodeKind {
+    pub fn kind(&self) -> &INodeKind<F> {
         &self.kind
     }
 
@@ -101,21 +98,24 @@ impl INodeEntry {
 }
 
 #[derive(Debug)]
-pub enum INodeKind {
+pub enum INodeKind<F> {
     Directory(Directory),
-    File(File),
+    File(F),
 }
 
+/// A generic INodeTable which allows indexing by paths and inodes
+///
+/// Maps `F` as a "File" type
 #[derive(Debug)]
-pub struct INodeTable {
-    map: HashMap<INode, INodeEntry>,
+pub struct INodeTable<F> {
+    map: HashMap<INode, INodeEntry<F>>,
     cur_ino: INode,
 }
 
-impl INodeTable {
+impl<F> INodeTable<F> {
     const ROOT: INode = INode(1);
 
-    pub fn add_entry(&mut self, name: OsString, entry: INodeEntry) -> INode {
+    pub fn add_entry(&mut self, name: OsString, entry: INodeEntry<F>) -> INode {
         let ino = self.next_open_inode();
         let parent = self
             .map
@@ -130,7 +130,7 @@ impl INodeTable {
         ino
     }
 
-    pub fn get<T: Into<INode>>(&self, ino: T) -> Option<&INodeEntry> {
+    pub fn get<T: Into<INode>>(&self, ino: T) -> Option<&INodeEntry<F>> {
         self.map.get(&ino.into())
     }
 
@@ -141,8 +141,8 @@ impl INodeTable {
     }
 }
 
-impl Default for INodeTable {
-    fn default() -> INodeTable {
+impl<F> Default for INodeTable<F> {
+    fn default() -> INodeTable<F> {
         let mut h = HashMap::with_capacity(24);
         h.insert(
             Self::ROOT,
