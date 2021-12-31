@@ -140,7 +140,7 @@ impl<F> INodeTable<F> {
 
     /// Looks up a path. Will function with or without a leading slash
     /// ```
-    /// # use polyfuse_fs::basic::{ROOT_INODE, INodeTable, Directory, INodeEntry};
+    /// # use simply_fuse::basic::{ROOT_INODE, INodeTable, Directory, INodeEntry};
     /// let mut tbl = INodeTable::<()>::default();
     /// let test_dir_inode = tbl.add_entry("example directory".into(), INodeEntry::new_directory(ROOT_INODE,
     /// None));
