@@ -2,8 +2,10 @@ use crate::{FileAttributes, FileType, INode};
 
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
+use std::path::Path;
 
 pub type DirChildren = HashMap<OsString, INode>;
+pub const ROOT_INODE: INode = INode(1);
 
 #[derive(Debug, Default)]
 pub struct Directory {
@@ -113,8 +115,6 @@ pub struct INodeTable<F> {
 }
 
 impl<F> INodeTable<F> {
-    const ROOT: INode = INode(1);
-
     pub fn add_entry(&mut self, name: OsString, entry: INodeEntry<F>) -> INode {
         let ino = self.next_open_inode();
         let parent = self
@@ -134,6 +134,57 @@ impl<F> INodeTable<F> {
         self.map.get(&ino.into())
     }
 
+    pub fn get_mut<T: Into<INode>>(&mut self, ino: T) -> Option<&mut INodeEntry<F>> {
+        self.map.get_mut(&ino.into())
+    }
+
+    /// Looks up a path. Will function with or without a leading slash
+    /// ```
+    /// # use polyfuse_fs::basic::{ROOT_INODE, INodeTable, Directory, INodeEntry};
+    /// let mut tbl = INodeTable::<()>::default();
+    /// let test_dir_inode = tbl.add_entry("example directory".into(), INodeEntry::new_directory(ROOT_INODE,
+    /// None));
+    ///
+    /// let root = tbl.lookup("/").unwrap();
+    /// let test_dir = tbl.lookup("example directory").unwrap();
+    ///
+    /// assert_eq!(root.0, ROOT_INODE);
+    /// assert_eq!(test_dir.0, test_dir_inode);
+    /// ```
+    pub fn lookup<T: AsRef<Path>>(&self, path: T) -> Option<(INode, &INodeEntry<F>)> {
+        let mut parent_ino = ROOT_INODE;
+        let mut parent = self.get(ROOT_INODE)?;
+
+        for component in path.as_ref().components() {
+            let path: &Path = component.as_ref();
+            let path_str = path.to_string_lossy();
+
+            match path_str.as_ref() {
+                "/" if parent_ino == ROOT_INODE => continue, // path starts with "/"
+                _ => {
+                    parent_ino = *parent.as_dir()?.get(path.as_os_str())?;
+                    parent = self.get(parent_ino)?;
+                }
+            }
+
+            println!("{:#?} {:#?}", component, path);
+        }
+
+        let ino = parent_ino;
+        let entry = parent;
+
+        Some((ino, entry))
+    }
+
+    /// See `lookup` for details
+    pub fn lookup_mut<T: AsRef<Path>>(&mut self, path: T) -> Option<(INode, &mut INodeEntry<F>)> {
+        let inode = self.lookup(path).map(|x| x.0);
+
+        inode
+            .and_then(|ino| self.get_mut(ino))
+            .map(|x| (inode.unwrap(), x))
+    }
+
     fn next_open_inode(&mut self) -> INode {
         let ino = self.cur_ino;
         self.cur_ino = ino.next_inode();
@@ -145,7 +196,7 @@ impl<F> Default for INodeTable<F> {
     fn default() -> INodeTable<F> {
         let mut h = HashMap::with_capacity(24);
         h.insert(
-            Self::ROOT,
+            ROOT_INODE,
             INodeEntry {
                 parent: None,
                 kind: INodeKind::Directory(Directory::default()),
@@ -154,7 +205,7 @@ impl<F> Default for INodeTable<F> {
 
         INodeTable {
             map: h,
-            cur_ino: Self::ROOT.next_inode(),
+            cur_ino: ROOT_INODE.next_inode(),
         }
     }
 }
