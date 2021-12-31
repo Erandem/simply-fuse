@@ -1,0 +1,290 @@
+pub mod basic;
+
+use std::ffi::{OsStr, OsString};
+use std::path::{Path, PathBuf};
+use std::thread::JoinHandle;
+use std::time::Duration;
+
+use anyhow::Result as Anyhow;
+use polyfuse::{op, reply, KernelConfig, Operation, Request, Session};
+use thiserror::Error;
+use typed_builder::TypedBuilder;
+
+pub type Result<T, E = Error> = std::result::Result<T, E>;
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub struct INode(u64);
+
+impl INode {
+    pub const fn to_u64(self) -> u64 {
+        self.0
+    }
+
+    const fn next_inode(self) -> INode {
+        INode(self.0 + 1)
+    }
+}
+
+impl From<u64> for INode {
+    fn from(i: u64) -> INode {
+        INode(i)
+    }
+}
+
+#[derive(Debug, TypedBuilder)]
+#[builder(field_defaults(default, setter(into)))]
+pub struct FileAttributes {
+    #[builder(!default, setter(!strip_option))]
+    mode: u32,
+    #[builder(default = 4096, setter(!strip_option))]
+    size: u64,
+    nlink: u32,
+
+    uid: u32,
+    gid: u32,
+
+    rdev: u32,
+    blksize: u32,
+    blocks: u64,
+
+    atime: Duration,
+    mtime: Duration,
+    ctime: Duration,
+
+    #[builder(default = Duration::from_secs(1))]
+    ttl: Duration,
+}
+
+#[derive(Debug, TypedBuilder)]
+pub struct Lookup {
+    attributes: FileAttributes,
+    inode: INode,
+
+    #[builder(default = None)]
+    generation: Option<u64>,
+
+    #[builder(default = Some(Duration::from_secs(1)))]
+    attr_timeout: Option<Duration>,
+
+    #[builder(default = Some(Duration::from_secs(1)))]
+    entry_timeout: Option<Duration>,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum FileType {
+    FIFO,
+    Unknown,
+    Regular,
+    Directory,
+    Socket,
+    Char,
+    Block,
+    Link,
+}
+
+impl FileType {
+    pub const fn to_libc_type(self) -> u8 {
+        match self {
+            Self::FIFO => libc::DT_FIFO,
+            Self::Unknown => libc::DT_UNKNOWN,
+            Self::Regular => libc::DT_REG,
+            Self::Directory => libc::DT_DIR,
+            Self::Socket => libc::DT_SOCK,
+            Self::Char => libc::DT_CHR,
+            Self::Block => libc::DT_BLK,
+            Self::Link => libc::DT_LNK,
+        }
+    }
+}
+
+#[derive(Debug, TypedBuilder, Clone)]
+pub struct DirEntry {
+    name: OsString,
+    inode: INode,
+    typ: FileType,
+    offset: u64,
+}
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("No such file or directory exists")]
+    NoEntry,
+
+    #[error("Not a directory")]
+    NotDirectory,
+
+    #[error("Function not implemented")]
+    NotImplemented,
+}
+
+impl Error {
+    const fn to_libc_error(self) -> i32 {
+        match self {
+            Self::NoEntry => libc::ENOENT,
+            Self::NotDirectory => libc::ENOTDIR,
+            Self::NotImplemented => libc::ENOSYS,
+        }
+    }
+}
+
+pub trait Filesystem {
+    fn lookup(&mut self, _parent: INode, _name: &OsStr) -> Result<Lookup> {
+        Err(Error::NotImplemented)
+    }
+
+    fn getattr(&mut self, _inode: INode) -> Result<FileAttributes> {
+        Err(Error::NotImplemented)
+    }
+
+    fn readdir(&mut self, _dir: INode, _offset: u64) -> Result<Vec<DirEntry>> {
+        Err(Error::NotImplemented)
+    }
+}
+
+#[derive(Debug)]
+pub struct Runner<T>
+where
+    T: Filesystem,
+{
+    mountpoint: PathBuf,
+    fs: T,
+}
+
+impl<T: Filesystem> Runner<T> {
+    pub fn new<P: AsRef<Path>>(fs: T, mountpoint: P) -> Runner<T> {
+        Runner {
+            mountpoint: mountpoint.as_ref().to_path_buf(),
+            fs,
+        }
+    }
+
+    pub fn run_block(&mut self) -> Anyhow<()> {
+        let session = Session::mount(self.mountpoint.to_path_buf(), KernelConfig::default())?;
+
+        while let Some(req) = session.next_request()? {
+            match req.operation()? {
+                Operation::Lookup(op) => self.handle_lookup(&req, op)?,
+                Operation::Getattr(op) => self.handle_getattr(&req, op)?,
+                Operation::Readdir(op) => self.handle_readdir(&req, op)?,
+                op => {
+                    eprintln!("unimplemented: {:?}", op);
+                    req.reply_error(Error::NotImplemented.to_libc_error())?;
+                }
+            }
+        }
+
+        todo!()
+    }
+
+    fn handle_lookup(&mut self, req: &Request, op: op::Lookup<'_>) -> Anyhow<()> {
+        match self.fs.lookup(op.parent().into(), op.name()) {
+            Ok(obj) => {
+                let mut res = reply::EntryOut::default();
+                res.ino(obj.inode.to_u64());
+
+                if let Some(generation) = obj.generation {
+                    res.generation(generation)
+                }
+
+                if let Some(attr_timeout) = obj.attr_timeout {
+                    res.ttl_attr(attr_timeout);
+                }
+
+                if let Some(entry_timeout) = obj.entry_timeout {
+                    res.ttl_entry(entry_timeout);
+                }
+
+                self.copy_file_attr(&obj.attributes, obj.inode, res.attr());
+                req.reply(res)?;
+            }
+            Err(e) => {
+                eprintln!("lookup err: {:#?}", e);
+                req.reply_error(e.to_libc_error())?;
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_getattr(&mut self, req: &Request, op: op::Getattr<'_>) -> Anyhow<()> {
+        match self.fs.getattr(op.ino().into()) {
+            Ok(obj) => {
+                let mut conv: reply::AttrOut = reply::AttrOut::default();
+                conv.attr().ino(op.ino()); // FileAttribute does not keep the inode
+                conv.ttl(obj.ttl);
+
+                self.copy_file_attr(&obj, op.ino().into(), conv.attr());
+                req.reply(conv)?;
+            }
+            Err(e) => {
+                eprintln!("getattr err: {:#?}", e);
+                req.reply_error(e.to_libc_error())?;
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_readdir(&mut self, req: &Request, op: op::Readdir<'_>) -> Anyhow<()> {
+        // TODO implement readdir plus support
+        // readdirplus doesn't seem to be documented by polyfuse plus, so we just force it to error
+        // currently
+        if op.mode() == op::ReaddirMode::Plus {
+            req.reply_error(Error::NotImplemented.to_libc_error())?;
+            return Ok(());
+        }
+
+        match self.fs.readdir(op.ino().into(), op.offset()) {
+            Ok(entries) => {
+                let mut rep = reply::ReaddirOut::new(op.size() as usize);
+
+                // use take_while as a for_each_while
+                entries
+                    .into_iter()
+                    .take_while(|x| {
+                        rep.entry(
+                            &x.name,
+                            x.inode.to_u64(),
+                            x.typ.to_libc_type() as u32,
+                            x.offset,
+                        )
+                    })
+                    .for_each(|_| {});
+
+                req.reply(rep)?;
+            }
+            Err(e) => {
+                eprintln!("readdir err: {:#?}", e);
+                req.reply_error(e.to_libc_error())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Copies the attributes from a `FileAttribute` plus inode to a polyfuse `FileAttr`
+    /// Passing the inode is required as `FileAttribute`s do not keep track of the inodes
+    fn copy_file_attr(&self, from: &FileAttributes, inode: INode, to: &mut reply::FileAttr) {
+        to.ino(inode.to_u64());
+
+        to.mode(from.mode);
+        to.size(from.size);
+        to.nlink(from.nlink);
+        to.uid(from.uid);
+        to.gid(from.gid);
+        to.rdev(from.rdev);
+        to.blksize(from.blksize);
+        to.blocks(from.blocks);
+        to.atime(from.atime);
+        to.mtime(from.mtime);
+        to.ctime(from.ctime);
+    }
+}
+
+impl<T: Filesystem + Send + 'static> Runner<T> {
+    /// Runs `self.run_block()` by spawning a new thread and returning the join handle.
+    pub fn run(mut self) -> JoinHandle<(Runner<T>, Anyhow<()>)> {
+        std::thread::spawn(move || {
+            let result = self.run_block();
+            (self, result)
+        })
+    }
+}
