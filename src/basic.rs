@@ -166,8 +166,6 @@ impl<F> INodeTable<F> {
                     parent = self.get(parent_ino)?;
                 }
             }
-
-            println!("{:#?} {:#?}", component, path);
         }
 
         let ino = parent_ino;
