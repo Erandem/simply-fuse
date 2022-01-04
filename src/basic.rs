@@ -37,19 +37,30 @@ impl<'a> Iterator for DirIter<'a> {
     }
 }
 
+pub trait Filelike {
+    fn getattr(&self) -> FileAttributes;
+}
+
 #[derive(Debug)]
-pub struct INodeEntry<F> {
+pub struct INodeEntry<F: Filelike> {
     parent: Option<INode>,
     kind: INodeKind<F>,
 }
 
-impl<F> INodeEntry<F> {
+impl<F: Filelike> INodeEntry<F> {
     pub fn new_directory(parent: INode, children: Option<DirChildren>) -> INodeEntry<F> {
         INodeEntry {
             parent: Some(parent),
             kind: INodeKind::Directory(Directory {
                 children: children.unwrap_or_default(),
             }),
+        }
+    }
+
+    pub fn new_file(parent: INode, file: F) -> INodeEntry<F> {
+        INodeEntry {
+            parent: Some(parent),
+            kind: INodeKind::File(file),
         }
     }
 
@@ -64,7 +75,7 @@ impl<F> INodeEntry<F> {
         }
     }
 
-    pub const fn parent(&self) -> Option<INode> {
+    pub fn parent(&self) -> Option<INode> {
         self.parent
     }
 
@@ -94,7 +105,7 @@ impl<F> INodeEntry<F> {
             INodeKind::Directory(_) => FileAttributes::builder()
                 .mode(libc::S_IFDIR | 0o755)
                 .build(),
-            _ => todo!("other getattr functions"),
+            INodeKind::File(file) => file.getattr(),
         }
     }
 }
@@ -109,12 +120,12 @@ pub enum INodeKind<F> {
 ///
 /// Maps `F` as a "File" type
 #[derive(Debug)]
-pub struct INodeTable<F> {
+pub struct INodeTable<F: Filelike> {
     map: HashMap<INode, INodeEntry<F>>,
     cur_ino: INode,
 }
 
-impl<F> INodeTable<F> {
+impl<F: Filelike> INodeTable<F> {
     pub fn add_entry(&mut self, name: OsString, entry: INodeEntry<F>) -> INode {
         let ino = self.next_open_inode();
         let parent = self
@@ -190,7 +201,7 @@ impl<F> INodeTable<F> {
     }
 }
 
-impl<F> Default for INodeTable<F> {
+impl<F: Filelike> Default for INodeTable<F> {
     fn default() -> INodeTable<F> {
         let mut h = HashMap::with_capacity(24);
         h.insert(
