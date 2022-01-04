@@ -139,6 +139,10 @@ pub trait Filesystem {
     fn readdir(&mut self, _dir: INode, _offset: u64) -> Result<Vec<DirEntry>> {
         Err(Error::NotImplemented)
     }
+
+    fn read(&mut self, _ino: INode, _offset: u64, _size: u32) -> Result<&[u8]> {
+        Err(Error::NotImplemented)
+    }
 }
 
 #[derive(Debug)]
@@ -166,6 +170,7 @@ impl<T: Filesystem> Runner<T> {
                 Operation::Lookup(op) => self.handle_lookup(&req, op)?,
                 Operation::Getattr(op) => self.handle_getattr(&req, op)?,
                 Operation::Readdir(op) => self.handle_readdir(&req, op)?,
+                Operation::Read(op) => self.handle_read(&req, op)?,
                 op => {
                     eprintln!("unimplemented: {:?}", op);
                     req.reply_error(Error::NotImplemented.to_libc_error())?;
@@ -253,6 +258,20 @@ impl<T: Filesystem> Runner<T> {
             }
             Err(e) => {
                 eprintln!("readdir err: {:#?}", e);
+                req.reply_error(e.to_libc_error())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_read(&mut self, req: &Request, op: op::Read<'_>) -> Anyhow<()> {
+        match self.fs.read(op.ino().into(), op.offset(), op.size()) {
+            Ok(data) => {
+                req.reply(data)?;
+            }
+            Err(e) => {
+                eprintln!("read err: {:#?}", e);
                 req.reply_error(e.to_libc_error())?;
             }
         }
