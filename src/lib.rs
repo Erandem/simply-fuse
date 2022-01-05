@@ -1,4 +1,7 @@
 pub mod basic;
+pub mod error;
+
+use crate::error::{FSError, FSResult, PolyfuseError, Result};
 
 use std::ffi::{OsStr, OsString};
 use std::io::BufRead;
@@ -6,12 +9,8 @@ use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use anyhow::Result as Anyhow;
 use polyfuse::{op, reply, KernelConfig, Operation, Request, Session};
-use thiserror::Error;
 use typed_builder::TypedBuilder;
-
-pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct INode(u64);
@@ -106,39 +105,13 @@ pub struct DirEntry {
     offset: u64,
 }
 
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("No such file or directory exists")]
-    NoEntry,
-
-    #[error("Not a file")]
-    NotFile,
-
-    #[error("Not a directory")]
-    NotDirectory,
-
-    #[error("Function not implemented")]
-    NotImplemented,
-}
-
-impl Error {
-    const fn to_libc_error(self) -> i32 {
-        match self {
-            Self::NoEntry => libc::ENOENT,
-            Self::NotFile => libc::EINVAL, // TODO is this the proper error to return?
-            Self::NotDirectory => libc::ENOTDIR,
-            Self::NotImplemented => libc::ENOSYS,
-        }
-    }
-}
-
 pub trait Filesystem {
-    fn lookup(&mut self, _parent: INode, _name: &OsStr) -> Result<Lookup> {
-        Err(Error::NotImplemented)
+    fn lookup(&mut self, _parent: INode, _name: &OsStr) -> FSResult<Lookup> {
+        Err(FSError::NotImplemented)
     }
 
-    fn getattr(&mut self, _inode: INode) -> Result<FileAttributes> {
-        Err(Error::NotImplemented)
+    fn getattr(&mut self, _inode: INode) -> FSResult<FileAttributes> {
+        Err(FSError::NotImplemented)
     }
 
     /// Reads a directory.
@@ -147,17 +120,23 @@ pub trait Filesystem {
     /// This method **must** include the "." and ".." directories, as well as properly accounting
     /// for `offset`. If not, some operations may get stuck in an infinite loop while trying to
     /// read a directory.
-    fn readdir(&mut self, _dir: INode, _offset: u64) -> Result<Vec<DirEntry>> {
-        Err(Error::NotImplemented)
+    fn readdir(&mut self, _dir: INode, _offset: u64) -> FSResult<Vec<DirEntry>> {
+        Err(FSError::NotImplemented)
     }
 
-    fn read(&mut self, _ino: INode, _offset: u64, _size: u32) -> Result<&[u8]> {
-        Err(Error::NotImplemented)
+    fn read(&mut self, _ino: INode, _offset: u64, _size: u32) -> FSResult<&[u8]> {
+        Err(FSError::NotImplemented)
     }
 
     /// Returns the amount of bytes written
-    fn write<T: BufRead>(&mut self, _ino: INode, _offset: u64, _size: u32, _buf: T) -> Result<u32> {
-        Err(Error::NotImplemented)
+    fn write<T: BufRead>(
+        &mut self,
+        _ino: INode,
+        _offset: u64,
+        _size: u32,
+        _buf: T,
+    ) -> FSResult<u32> {
+        Err(FSError::NotImplemented)
     }
 }
 
@@ -178,11 +157,11 @@ impl<T: Filesystem> Runner<T> {
         }
     }
 
-    pub fn run_block(&mut self) -> Anyhow<()> {
+    pub fn run_block(&mut self) -> Result<()> {
         let session = Session::mount(self.mountpoint.to_path_buf(), KernelConfig::default())?;
 
         while let Some(req) = session.next_request()? {
-            match req.operation()? {
+            match req.operation().map_err(PolyfuseError::DecodeError)? {
                 Operation::Lookup(op) => self.handle_lookup(&req, op)?,
                 Operation::Getattr(op) => self.handle_getattr(&req, op)?,
                 Operation::Readdir(op) => self.handle_readdir(&req, op)?,
@@ -190,7 +169,8 @@ impl<T: Filesystem> Runner<T> {
                 Operation::Write(op, buf) => self.handle_write(&req, op, buf)?,
                 op => {
                     eprintln!("unimplemented: {:?}", op);
-                    req.reply_error(Error::NotImplemented.to_libc_error())?;
+                    req.reply_error(FSError::NotImplemented.to_libc_error())
+                        .map_err(PolyfuseError::ReplyErrError)?;
                 }
             }
         }
@@ -198,7 +178,7 @@ impl<T: Filesystem> Runner<T> {
         todo!()
     }
 
-    fn handle_lookup(&mut self, req: &Request, op: op::Lookup<'_>) -> Anyhow<()> {
+    fn handle_lookup(&mut self, req: &Request, op: op::Lookup<'_>) -> Result<(), PolyfuseError> {
         match self.fs.lookup(op.parent().into(), op.name()) {
             Ok(obj) => {
                 let mut res = reply::EntryOut::default();
@@ -217,17 +197,18 @@ impl<T: Filesystem> Runner<T> {
                 }
 
                 self.copy_file_attr(&obj.attributes, obj.inode, res.attr());
-                req.reply(res)?;
+                req.reply(res).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
                 eprintln!("lookup err: {:#?}", e);
-                req.reply_error(e.to_libc_error())?;
+                req.reply_error(e.to_libc_error())
+                    .map_err(PolyfuseError::ReplyErrError)?;
             }
         }
         Ok(())
     }
 
-    fn handle_getattr(&mut self, req: &Request, op: op::Getattr<'_>) -> Anyhow<()> {
+    fn handle_getattr(&mut self, req: &Request, op: op::Getattr<'_>) -> Result<(), PolyfuseError> {
         match self.fs.getattr(op.ino().into()) {
             Ok(obj) => {
                 let mut conv: reply::AttrOut = reply::AttrOut::default();
@@ -235,22 +216,24 @@ impl<T: Filesystem> Runner<T> {
                 conv.ttl(obj.ttl);
 
                 self.copy_file_attr(&obj, op.ino().into(), conv.attr());
-                req.reply(conv)?;
+                req.reply(conv).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
                 eprintln!("getattr err: {:#?}", e);
-                req.reply_error(e.to_libc_error())?;
+                req.reply_error(e.to_libc_error())
+                    .map_err(PolyfuseError::ReplyErrError)?;
             }
         }
         Ok(())
     }
 
-    fn handle_readdir(&mut self, req: &Request, op: op::Readdir<'_>) -> Anyhow<()> {
+    fn handle_readdir(&mut self, req: &Request, op: op::Readdir<'_>) -> Result<(), PolyfuseError> {
         // TODO implement readdir plus support
         // readdirplus doesn't seem to be documented by polyfuse plus, so we just force it to error
         // currently
         if op.mode() == op::ReaddirMode::Plus {
-            req.reply_error(Error::NotImplemented.to_libc_error())?;
+            req.reply_error(FSError::NotImplemented.to_libc_error())
+                .map_err(PolyfuseError::ReplyErrError)?;
             return Ok(());
         }
 
@@ -271,42 +254,51 @@ impl<T: Filesystem> Runner<T> {
                     })
                     .for_each(|_| {});
 
-                req.reply(rep)?;
+                req.reply(rep).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
                 eprintln!("readdir err: {:#?}", e);
-                req.reply_error(e.to_libc_error())?;
+                req.reply_error(e.to_libc_error())
+                    .map_err(PolyfuseError::ReplyErrError)?;
             }
         }
 
         Ok(())
     }
 
-    fn handle_read(&mut self, req: &Request, op: op::Read<'_>) -> Anyhow<()> {
+    fn handle_read(&mut self, req: &Request, op: op::Read<'_>) -> Result<(), PolyfuseError> {
         match self.fs.read(op.ino().into(), op.offset(), op.size()) {
             Ok(data) => {
-                req.reply(data)?;
+                req.reply(data).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
                 eprintln!("read err: {:#?}", e);
-                req.reply_error(e.to_libc_error())?;
+                req.reply_error(e.to_libc_error())
+                    .map_err(PolyfuseError::ReplyErrError)?;
             }
         }
 
         Ok(())
     }
 
-    fn handle_write<B: BufRead>(&mut self, req: &Request, op: op::Write<'_>, buf: B) -> Anyhow<()> {
+    fn handle_write<B: BufRead>(
+        &mut self,
+        req: &Request,
+        op: op::Write<'_>,
+        buf: B,
+    ) -> Result<(), PolyfuseError> {
         match self.fs.write(op.ino().into(), op.offset(), op.size(), buf) {
             Ok(len) => {
                 let mut rep = reply::WriteOut::default();
                 rep.size(len);
 
-                req.reply(rep)?;
+                req.reply(rep).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
                 eprintln!("write err: {:#?}", e);
-                req.reply_error(e.to_libc_error())?;
+
+                req.reply_error(e.to_libc_error())
+                    .map_err(PolyfuseError::ReplyErrError)?;
             }
         }
 
@@ -334,7 +326,7 @@ impl<T: Filesystem> Runner<T> {
 
 impl<T: Filesystem + Send + 'static> Runner<T> {
     /// Runs `self.run_block()` by spawning a new thread and returning the join handle.
-    pub fn run(mut self) -> JoinHandle<(Runner<T>, Anyhow<()>)> {
+    pub fn run(mut self) -> JoinHandle<(Runner<T>, Result<()>)> {
         std::thread::spawn(move || {
             let result = self.run_block();
             (self, result)

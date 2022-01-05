@@ -1,12 +1,11 @@
 use simply_fuse::basic::*;
+use simply_fuse::error::{FSError, FSResult as Result};
 use simply_fuse::*;
 
 use std::ffi::OsStr;
 use std::io::BufRead;
 
-use anyhow::Result as Anyhow;
-
-fn main() -> Anyhow<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut fs = MemFS::new();
     fs.inodes
         .add_entry("test".into(), INodeEntry::new_directory(1u64.into(), None));
@@ -73,14 +72,14 @@ impl Filesystem for MemFS {
         let parent = self
             .inodes
             .get(parent)
-            .ok_or(Error::NoEntry)
-            .and_then(|x| x.as_dir().ok_or(Error::NotDirectory))?;
+            .ok_or(FSError::NoEntry)
+            .and_then(|x| x.as_dir().ok_or(FSError::NotDirectory))?;
 
         let (child_ino, child) = parent
             .get(name)
             // get the inode entry and then map it into (inode, &entry)
             .and_then(|ino| self.inodes.get(*ino).map(|x| (*ino, x)))
-            .ok_or(Error::NoEntry)?;
+            .ok_or(FSError::NoEntry)?;
 
         Ok(Lookup::builder()
             .attributes(child.getattr())
@@ -89,14 +88,14 @@ impl Filesystem for MemFS {
     }
 
     fn getattr(&mut self, inode: INode) -> Result<FileAttributes> {
-        let entry = self.inodes.get(inode).ok_or(Error::NoEntry)?;
+        let entry = self.inodes.get(inode).ok_or(FSError::NoEntry)?;
 
         Ok(entry.getattr())
     }
 
     fn readdir(&mut self, dir_ino: INode, offset: u64) -> Result<Vec<DirEntry>> {
-        let dir_main = self.inodes.get(dir_ino).ok_or(Error::NoEntry)?;
-        let dir = dir_main.as_dir().ok_or(Error::NotDirectory)?;
+        let dir_main = self.inodes.get(dir_ino).ok_or(FSError::NoEntry)?;
+        let dir = dir_main.as_dir().ok_or(FSError::NotDirectory)?;
 
         let dots = [
             DirEntry::builder()
@@ -137,8 +136,8 @@ impl Filesystem for MemFS {
     }
 
     fn read(&mut self, ino: INode, offset: u64, size: u32) -> Result<&[u8]> {
-        let file = self.inodes.get(ino).ok_or(Error::NoEntry)?;
-        let file = file.as_file().ok_or(Error::NotFile)?;
+        let file = self.inodes.get(ino).ok_or(FSError::NoEntry)?;
+        let file = file.as_file().ok_or(FSError::NotFile)?;
 
         let offset = offset as usize;
         let size = size as usize;
@@ -150,8 +149,8 @@ impl Filesystem for MemFS {
     }
 
     fn write<T: BufRead>(&mut self, ino: INode, offset: u64, size: u32, mut buf: T) -> Result<u32> {
-        let file = self.inodes.get_mut(ino).ok_or(Error::NoEntry)?;
-        let file = file.as_file_mut().ok_or(Error::NotFile)?;
+        let file = self.inodes.get_mut(ino).ok_or(FSError::NoEntry)?;
+        let file = file.as_file_mut().ok_or(FSError::NotFile)?;
 
         let offset = offset as usize;
         let size = size as usize;
