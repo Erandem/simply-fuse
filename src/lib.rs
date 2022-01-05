@@ -55,6 +55,19 @@ pub struct FileAttributes {
     ttl: Duration,
 }
 
+#[derive(Debug)]
+pub struct SetFileAttributes {
+    mode: Option<u32>,
+    size: Option<u64>,
+
+    uid: Option<u32>,
+    gid: Option<u32>,
+
+    atime: Option<Duration>,
+    mtime: Option<Duration>,
+    ctime: Option<Duration>,
+}
+
 #[derive(Debug, TypedBuilder)]
 pub struct Lookup {
     attributes: FileAttributes,
@@ -114,6 +127,10 @@ pub trait Filesystem {
         Err(FSError::NotImplemented)
     }
 
+    fn setattr(&mut self, _inode: INode, _attr: SetFileAttributes) -> FSResult<FileAttributes> {
+        Err(FSError::NotImplemented)
+    }
+
     /// Reads a directory.
     ///
     /// # Warning
@@ -164,6 +181,7 @@ impl<T: Filesystem> Runner<T> {
             match req.operation().map_err(PolyfuseError::DecodeError)? {
                 Operation::Lookup(op) => self.handle_lookup(&req, op)?,
                 Operation::Getattr(op) => self.handle_getattr(&req, op)?,
+                Operation::Setattr(op) => self.handle_setattr(&req, op)?,
                 Operation::Readdir(op) => self.handle_readdir(&req, op)?,
                 Operation::Read(op) => self.handle_read(&req, op)?,
                 Operation::Write(op, buf) => self.handle_write(&req, op, buf)?,
@@ -224,6 +242,26 @@ impl<T: Filesystem> Runner<T> {
                     .map_err(PolyfuseError::ReplyErrError)?;
             }
         }
+        Ok(())
+    }
+
+    fn handle_setattr(&mut self, req: &Request, op: op::Setattr<'_>) -> Result<(), PolyfuseError> {
+        match self.fs.setattr(op.ino(), attrs) {
+            Ok(obj) => {
+                let mut conv: reply::AttrOut = reply::AttrOut::default();
+                conv.attr().ino(op.ino());
+                conv.ttl(obj.ttl);
+
+                self.copy_file_attr(&obj, op.ino().into(), conv.attr());
+                req.reply(conv).map_err(PolyfuseError::ReplyError)?;
+            }
+            Err(e) => {
+                eprintln!("setattr err: {:#?}", e);
+                req.reply_error(e.to_libc_error())
+                    .map_err(PolyfuseError::ReplyErrError)?;
+            }
+        }
+
         Ok(())
     }
 
