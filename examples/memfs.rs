@@ -5,10 +5,14 @@ use simply_fuse::*;
 
 use std::ffi::OsStr;
 use std::io::BufRead;
+use std::path::Path;
 
 const TEST_MSG: &str = "hello_world!";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mount = &Path::new("./memfs-mount/");
+    let _ = std::fs::create_dir(mount);
+
     let mut fs = MemFS::new();
     fs.inodes
         .push_entry(ROOT_INODE, "test".into(), Directory::default());
@@ -28,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         File::new(TEST_MSG.as_bytes().into()),
     );
 
-    let mut r = Runner::new(fs, "./mount");
+    let mut r = Runner::new(fs, mount);
     println!("{:#?}", r);
     r.run_block()?;
 
