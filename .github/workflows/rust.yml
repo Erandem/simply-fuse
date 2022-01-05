@@ -1,7 +1,6 @@
-name: CI
-
 on: [push, pull_request]
 
+name: Continuous integration
 
 jobs:
   check:
@@ -63,5 +62,3 @@ jobs:
         with:
           command: clippy
           args: -- -D warnings
-    - name: Run tests
-      run: cargo test --verbose
