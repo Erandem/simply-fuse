@@ -24,10 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs.inodes.push_entry(
         ROOT_INODE,
         "file".into(),
-        File {
-            data: TEST_MSG.as_bytes().into(),
-            size: TEST_MSG.as_bytes().len(),
-        },
+        File::new(TEST_MSG.as_bytes().into()),
     );
 
     let mut r = Runner::new(fs, "./mount");
@@ -37,18 +34,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct File {
     pub data: Vec<u8>,
-    pub size: usize,
+    pub attrs: FileAttributes,
+}
+
+impl File {
+    fn new(data: Vec<u8>) -> File {
+        File {
+            attrs: FileAttributes::builder()
+                .size(data.len() as u64)
+                .mode(libc::S_IFREG | 0o755)
+                .build(),
+
+            data,
+        }
+    }
+
+    fn size(&self) -> usize {
+        self.attrs.size() as usize
+    }
 }
 
 impl Attributable for File {
     fn getattrs(&self) -> FileAttributes {
-        FileAttributes::builder()
-            .mode(libc::S_IFREG | 0o755)
-            .size(self.size as u64)
-            .build()
+        self.attrs
     }
 }
 
@@ -143,7 +154,7 @@ impl Filesystem for MemFS {
         let size = size as usize;
 
         let content = file.data.get(offset..).unwrap_or(&[]);
-        let content = &content[..std::cmp::min(file.size, size)];
+        let content = &content[..std::cmp::min(file.size(), size)];
 
         Ok(content)
     }
@@ -155,11 +166,13 @@ impl Filesystem for MemFS {
         let offset = offset as usize;
         let size = size as usize;
 
-        file.data.resize(std::cmp::max(file.size, offset + size), 0);
+        file.data
+            .resize(std::cmp::max(file.size(), offset + size), 0);
+
         buf.read_exact(&mut file.data[offset..offset + size])
             .unwrap();
 
-        file.size = offset + size;
+        file.attrs = file.attrs.set_size((offset + size) as u64);
 
         Ok(size as u32)
     }
@@ -167,11 +180,9 @@ impl Filesystem for MemFS {
     fn setattr(&mut self, ino: INode, attrs: SetFileAttributes) -> Result<FileAttributes> {
         let entry = self.inodes.get_mut(ino).ok_or(FSError::NoEntry)?;
 
-        match entry.kind_mut() {
-            INodeKind::Directory(dir) => dir.update_attrs(attrs),
-            INodeKind::File(file) => todo!(),
-        };
-
-        Ok(entry.getattrs())
+        Ok(match entry.kind_mut() {
+            INodeKind::Directory(dir) => dir.apply_attrs(attrs),
+            INodeKind::File(file) => file.attrs.apply_attrs(attrs),
+        })
     }
 }
