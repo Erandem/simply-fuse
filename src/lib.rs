@@ -31,7 +31,7 @@ impl From<u64> for INode {
     }
 }
 
-#[derive(Debug, TypedBuilder)]
+#[derive(Copy, Clone, Debug, TypedBuilder)]
 #[builder(field_defaults(default, setter(into)))]
 pub struct FileAttributes {
     #[builder(!default, setter(!strip_option))]
@@ -55,7 +55,7 @@ pub struct FileAttributes {
     ttl: Duration,
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct SetFileAttributes {
     mode: Option<u32>,
     size: Option<u64>,
