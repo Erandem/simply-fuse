@@ -42,12 +42,12 @@ pub trait Filelike {
 }
 
 #[derive(Debug)]
-pub struct INodeEntry<F: Filelike> {
+pub struct INodeEntry<F> {
     parent: Option<INode>,
     kind: INodeKind<F>,
 }
 
-impl<F: Filelike> INodeEntry<F> {
+impl<F> INodeEntry<F> {
     pub fn new_directory(parent: INode, children: Option<DirChildren>) -> INodeEntry<F> {
         INodeEntry {
             parent: Some(parent),
@@ -113,7 +113,9 @@ impl<F: Filelike> INodeEntry<F> {
             _ => None,
         }
     }
+}
 
+impl<T: Filelike> INodeEntry<T> {
     pub fn getattr(&self) -> FileAttributes {
         match self.kind() {
             INodeKind::Directory(_) => FileAttributes::builder()
@@ -134,12 +136,12 @@ pub enum INodeKind<F> {
 ///
 /// Maps `F` as a "File" type
 #[derive(Debug)]
-pub struct INodeTable<F: Filelike> {
+pub struct INodeTable<F> {
     map: HashMap<INode, INodeEntry<F>>,
     cur_ino: INode,
 }
 
-impl<F: Filelike> INodeTable<F> {
+impl<F> INodeTable<F> {
     pub fn add_entry(&mut self, name: OsString, entry: INodeEntry<F>) -> INode {
         let ino = self.next_open_inode();
         let parent = self
@@ -215,7 +217,7 @@ impl<F: Filelike> INodeTable<F> {
     }
 }
 
-impl<F: Filelike> Default for INodeTable<F> {
+impl<F> Default for INodeTable<F> {
     fn default() -> INodeTable<F> {
         let mut h = HashMap::with_capacity(24);
         h.insert(
