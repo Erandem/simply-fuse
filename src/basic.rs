@@ -93,6 +93,20 @@ impl<F: Filelike> INodeEntry<F> {
         }
     }
 
+    pub fn as_file(&self) -> Option<&F> {
+        match &self.kind() {
+            INodeKind::File(file) => Some(file),
+            _ => None,
+        }
+    }
+
+    pub fn as_file_mut(&mut self) -> Option<&mut F> {
+        match &mut self.kind {
+            INodeKind::File(file) => Some(file),
+            _ => None,
+        }
+    }
+
     pub fn children(&self) -> Option<&DirChildren> {
         match self.kind() {
             INodeKind::Directory(dir) => Some(&dir.children),
