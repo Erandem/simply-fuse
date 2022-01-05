@@ -55,6 +55,61 @@ pub struct FileAttributes {
     ttl: Duration,
 }
 
+impl FileAttributes {
+    pub fn mode(&self) -> u32 {
+        self.mode
+    }
+
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+
+    pub fn nlink(&self) -> u32 {
+        self.nlink
+    }
+
+    pub fn uid(&self) -> u32 {
+        self.uid
+    }
+
+    pub fn gid(&self) -> u32 {
+        self.gid
+    }
+
+    pub fn rdev(&self) -> u32 {
+        self.rdev
+    }
+
+    pub fn blksize(&self) -> u32 {
+        self.blksize
+    }
+
+    pub fn blocks(&self) -> u64 {
+        self.blocks
+    }
+
+    pub fn atime(&self) -> Duration {
+        self.atime
+    }
+
+    pub fn mtime(&self) -> Duration {
+        self.mtime
+    }
+
+    pub fn ctime(&self) -> Duration {
+        self.ctime
+    }
+
+    /// # Note
+    /// `ttl` means `time to live`
+    /// This is **not** time to live, such as you'd go live on Twitch. It means time to live,
+    /// as in the remaining time you have left alive. I spent way too long misunderstanding
+    /// that.
+    pub fn ttl(&self) -> Duration {
+        self.ttl
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub struct SetFileAttributes {
     mode: Option<u32>,
