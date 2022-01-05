@@ -48,22 +48,6 @@ pub struct INodeEntry<F> {
 }
 
 impl<F> INodeEntry<F> {
-    pub fn new_directory(parent: INode, children: Option<DirChildren>) -> INodeEntry<F> {
-        INodeEntry {
-            parent: Some(parent),
-            kind: INodeKind::Directory(Directory {
-                children: children.unwrap_or_default(),
-            }),
-        }
-    }
-
-    pub fn new_file(parent: INode, file: F) -> INodeEntry<F> {
-        INodeEntry {
-            parent: Some(parent),
-            kind: INodeKind::File(file),
-        }
-    }
-
     pub fn kind(&self) -> &INodeKind<F> {
         &self.kind
     }
