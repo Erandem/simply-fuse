@@ -115,6 +115,35 @@ impl<F> INodeEntry<F> {
     }
 }
 
+pub trait IntoINodeEntry<F> {
+    fn with_parent(self, parent: INode) -> INodeEntry<F>;
+}
+
+impl<F: Filelike> IntoINodeEntry<F> for F {
+    fn with_parent(self, parent: INode) -> INodeEntry<F> {
+        INodeEntry {
+            parent: Some(parent),
+            kind: INodeKind::File(self),
+        }
+    }
+}
+
+impl<F> IntoINodeEntry<F> for Directory {
+    fn with_parent(self, parent: INode) -> INodeEntry<F> {
+        INodeEntry {
+            parent: Some(parent),
+            kind: INodeKind::Directory(self),
+        }
+    }
+}
+
+impl<F> IntoINodeEntry<F> for INodeEntry<F> {
+    fn with_parent(mut self, parent: INode) -> INodeEntry<F> {
+        self.parent = Some(parent);
+        self
+    }
+}
+
 impl<T: Filelike> INodeEntry<T> {
     pub fn getattr(&self) -> FileAttributes {
         match self.kind() {
