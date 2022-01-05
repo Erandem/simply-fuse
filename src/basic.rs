@@ -7,9 +7,25 @@ use std::path::Path;
 pub type DirChildren = HashMap<OsString, INode>;
 pub const ROOT_INODE: INode = INode(1);
 
+pub trait Attributable {
+    fn getattrs(&self) -> FileAttributes;
+}
+
+/// Represents an object that acts like a file on the filesystem
+pub trait Filelike: Attributable {}
+
 #[derive(Debug, Default)]
 pub struct Directory {
     children: DirChildren,
+}
+
+impl Attributable for Directory {
+    fn getattrs(&self) -> FileAttributes {
+        FileAttributes::builder()
+            .mode(libc::S_IFDIR)
+            .size(std::mem::size_of::<Directory>() as u64)
+            .build()
+    }
 }
 
 impl Directory {
@@ -35,10 +51,6 @@ impl<'a> Iterator for DirIter<'a> {
         // Deref since INode is cheap to copy
         self.iter.next().map(|(name, ino)| (name, *ino))
     }
-}
-
-pub trait Filelike {
-    fn getattr(&self) -> FileAttributes;
 }
 
 #[derive(Debug)]
@@ -99,6 +111,15 @@ impl<F> INodeEntry<F> {
     }
 }
 
+impl<T: Attributable> INodeEntry<T> {
+    pub fn getattrs(&self) -> FileAttributes {
+        match self.kind() {
+            INodeKind::Directory(dir) => dir.getattrs(),
+            INodeKind::File(file) => file.getattrs(),
+        }
+    }
+}
+
 pub trait IntoINodeEntry<F> {
     fn with_parent(self, parent: INode) -> INodeEntry<F>;
 }
@@ -125,17 +146,6 @@ impl<F> IntoINodeEntry<F> for INodeEntry<F> {
     fn with_parent(mut self, parent: INode) -> INodeEntry<F> {
         self.parent = Some(parent);
         self
-    }
-}
-
-impl<T: Filelike> INodeEntry<T> {
-    pub fn getattr(&self) -> FileAttributes {
-        match self.kind() {
-            INodeKind::Directory(_) => FileAttributes::builder()
-                .mode(libc::S_IFDIR | 0o755)
-                .build(),
-            INodeKind::File(file) => file.getattr(),
-        }
     }
 }
 

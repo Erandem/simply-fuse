@@ -43,14 +43,16 @@ pub struct File {
     pub size: usize,
 }
 
-impl Filelike for File {
-    fn getattr(&self) -> FileAttributes {
+impl Attributable for File {
+    fn getattrs(&self) -> FileAttributes {
         FileAttributes::builder()
             .mode(libc::S_IFREG | 0o755)
             .size(self.size as u64)
             .build()
     }
 }
+
+impl Filelike for File {}
 
 #[derive(Debug)]
 struct MemFS {
@@ -80,7 +82,7 @@ impl Filesystem for MemFS {
             .ok_or(FSError::NoEntry)?;
 
         Ok(Lookup::builder()
-            .attributes(child.getattr())
+            .attributes(child.getattrs())
             .inode(child_ino)
             .build())
     }
@@ -88,7 +90,7 @@ impl Filesystem for MemFS {
     fn getattr(&mut self, inode: INode) -> Result<FileAttributes> {
         let entry = self.inodes.get(inode).ok_or(FSError::NoEntry)?;
 
-        Ok(entry.getattr())
+        Ok(entry.getattrs())
     }
 
     fn readdir(&mut self, dir_ino: INode, offset: u64) -> Result<Vec<DirEntry>> {
