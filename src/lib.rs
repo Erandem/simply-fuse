@@ -108,6 +108,66 @@ impl FileAttributes {
     pub fn ttl(&self) -> Duration {
         self.ttl
     }
+
+    pub fn set_mode(mut self, mode: u32) -> FileAttributes {
+        self.mode = mode;
+        self
+    }
+
+    pub fn set_size(mut self, size: u64) -> FileAttributes {
+        self.size = size;
+        self
+    }
+
+    pub fn set_nlink(mut self, nlink: u32) -> FileAttributes {
+        self.nlink = nlink;
+        self
+    }
+
+    pub fn set_uid(mut self, uid: u32) -> FileAttributes {
+        self.uid = uid;
+        self
+    }
+
+    pub fn set_gid(mut self, gid: u32) -> FileAttributes {
+        self.gid = gid;
+        self
+    }
+
+    pub fn set_rdev(mut self, rdev: u32) -> FileAttributes {
+        self.rdev = rdev;
+        self
+    }
+
+    pub fn set_blksize(mut self, blksize: u32) -> FileAttributes {
+        self.blksize = blksize;
+        self
+    }
+
+    pub fn set_blocks(mut self, blocks: u64) -> FileAttributes {
+        self.blocks = blocks;
+        self
+    }
+
+    pub fn set_atime(mut self, atime: Duration) -> FileAttributes {
+        self.atime = atime;
+        self
+    }
+
+    pub fn set_mtime(mut self, mtime: Duration) -> FileAttributes {
+        self.mtime = mtime;
+        self
+    }
+
+    pub fn set_ctime(mut self, ctime: Duration) -> FileAttributes {
+        self.ctime = ctime;
+        self
+    }
+
+    pub fn set_ttl(mut self, ttl: Duration) -> FileAttributes {
+        self.ttl = ttl;
+        self
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
