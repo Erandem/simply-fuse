@@ -1,3 +1,4 @@
+#![feature(decl_macro)]
 pub mod basic;
 pub mod error;
 

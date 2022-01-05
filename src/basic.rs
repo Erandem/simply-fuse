@@ -1,4 +1,4 @@
-use crate::{FileAttributes, FileType, INode};
+use crate::{FileAttributes, FileType, INode, SetFileAttributes};
 
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
@@ -14,17 +14,48 @@ pub trait Attributable {
 /// Represents an object that acts like a file on the filesystem
 pub trait Filelike: Attributable {}
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Directory {
     children: DirChildren,
+    attrs: FileAttributes,
+}
+
+impl Directory {
+    pub fn update_attrs(&mut self, attrs: SetFileAttributes) -> FileAttributes {
+        // TODO convert this to macro_rules! maybe
+        macro copy_attr($name:ident) {
+            if let Some(attr) = attrs.$name {
+                self.attrs.$name = attr;
+            }
+        }
+
+        copy_attr!(mode);
+        copy_attr!(size);
+        copy_attr!(uid);
+        copy_attr!(gid);
+        copy_attr!(atime);
+        copy_attr!(mtime);
+        copy_attr!(ctime);
+
+        self.attrs
+    }
+}
+
+impl Default for Directory {
+    fn default() -> Directory {
+        Directory {
+            children: DirChildren::default(),
+            attrs: FileAttributes::builder()
+                .mode(libc::S_IFDIR)
+                .size(std::mem::size_of::<Directory>() as u64)
+                .build(),
+        }
+    }
 }
 
 impl Attributable for Directory {
     fn getattrs(&self) -> FileAttributes {
-        FileAttributes::builder()
-            .mode(libc::S_IFDIR)
-            .size(std::mem::size_of::<Directory>() as u64)
-            .build()
+        self.attrs
     }
 }
 

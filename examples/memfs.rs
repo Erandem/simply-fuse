@@ -163,4 +163,15 @@ impl Filesystem for MemFS {
 
         Ok(size as u32)
     }
+
+    fn setattr(&mut self, ino: INode, attrs: SetFileAttributes) -> Result<FileAttributes> {
+        let entry = self.inodes.get_mut(ino).ok_or(FSError::NoEntry)?;
+
+        match entry.kind_mut() {
+            INodeKind::Directory(dir) => dir.update_attrs(attrs),
+            INodeKind::File(file) => todo!(),
+        };
+
+        Ok(entry.getattrs())
+    }
 }
