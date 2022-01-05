@@ -170,10 +170,25 @@ impl FileAttributes {
         self
     }
 
+    #[deny(unused_variables)]
     pub fn apply_attrs(&mut self, attrs: SetFileAttributes) -> FileAttributes {
+        // Here's a cool trick: By denying unused variables for this function and unpacking the
+        // struct below, this function will fail to compile if we update SetFileAttributes without
+        // modifying this function. Sure, there's reasons we might want to do that in the future,
+        // but we also want to make sure we always modify these variables
+        let SetFileAttributes {
+            mode,
+            size,
+            uid,
+            gid,
+            atime,
+            mtime,
+            ctime,
+        } = attrs;
+
         // TODO convert this to macro_rules! maybe
         macro copy_attr($name:ident) {
-            if let Some(attr) = attrs.$name {
+            if let Some(attr) = $name {
                 self.$name = attr;
             }
         }
