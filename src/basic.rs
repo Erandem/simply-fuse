@@ -21,23 +21,8 @@ pub struct Directory {
 }
 
 impl Directory {
-    pub fn update_attrs(&mut self, attrs: SetFileAttributes) -> FileAttributes {
-        // TODO convert this to macro_rules! maybe
-        macro copy_attr($name:ident) {
-            if let Some(attr) = attrs.$name {
-                self.attrs.$name = attr;
-            }
-        }
-
-        copy_attr!(mode);
-        copy_attr!(size);
-        copy_attr!(uid);
-        copy_attr!(gid);
-        copy_attr!(atime);
-        copy_attr!(mtime);
-        copy_attr!(ctime);
-
-        self.attrs
+    pub fn apply_attrs(&mut self, attrs: SetFileAttributes) -> FileAttributes {
+        self.attrs.apply_attrs(attrs)
     }
 }
 
