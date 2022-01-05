@@ -263,3 +263,138 @@ impl<F> Default for INodeTable<F> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Default, Debug)]
+    struct BlankFile {}
+
+    impl IntoINodeEntry<BlankFile> for BlankFile {
+        fn with_parent(self, parent: INode) -> INodeEntry<BlankFile> {
+            INodeEntry {
+                parent: Some(parent),
+                kind: INodeKind::File(self),
+            }
+        }
+    }
+
+    fn blank_table() -> INodeTable<BlankFile> {
+        INodeTable::<BlankFile>::default()
+    }
+
+    #[test]
+    fn omit_root_slash_lookup() {
+        let mut fs = blank_table();
+        let _ = fs.push_entry(ROOT_INODE, "root file".into(), BlankFile::default());
+        let _ = fs.push_entry(ROOT_INODE, "root dir".into(), Directory::default());
+
+        let file = fs.lookup("/root file").unwrap();
+
+        assert_eq!(
+            fs.lookup("root file").unwrap().0,
+            file.0,
+            "omitting / from paths returns different results"
+        );
+
+        assert!(
+            file.1.as_file().is_some(),
+            "expected file, returned directory"
+        );
+    }
+
+    #[test]
+    fn check_proper_parenting() {
+        let mut fs = blank_table();
+
+        let dir_ino = fs
+            .push_entry(ROOT_INODE, "dir".into(), Directory::default())
+            .unwrap();
+
+        let file_ino = fs
+            .push_entry(dir_ino, "file".into(), BlankFile::default())
+            .unwrap();
+
+        let file = fs
+            .get(file_ino)
+            .expect("file was not added to the inode map");
+
+        assert!(file.parent().is_some(), "file has no parent set");
+
+        assert_eq!(
+            fs.get(file_ino).unwrap().parent().unwrap(),
+            dir_ino,
+            "file's parent is not set correctly"
+        );
+    }
+
+    #[test]
+    fn default_table_has_root() {
+        let fs = INodeTable::<()>::default();
+
+        assert!(fs.get(ROOT_INODE).is_some(), "ROOT_INODE does not exist");
+
+        assert_eq!(
+            fs.get(ROOT_INODE).unwrap().parent(),
+            None,
+            "ROOT_INODE does not have a parent"
+        );
+    }
+
+    /// This test should never fail. If it does, we likely have some much bigger problems somewhere
+    #[test]
+    fn ensure_lookup_equals_lookup_mut() {
+        let mut fs = blank_table();
+
+        {
+            // ensure we don't use these later
+            let dir1 = fs
+                .push_entry(ROOT_INODE, "dir1".into(), Directory::default())
+                .unwrap();
+
+            let dir2 = fs
+                .push_entry(dir1, "dir2".into(), Directory::default())
+                .unwrap();
+
+            let dir3 = fs
+                .push_entry(dir2, "dir3".into(), Directory::default())
+                .unwrap();
+
+            let _file1 = fs
+                .push_entry(dir3, "file1".into(), BlankFile::default())
+                .unwrap();
+        };
+
+        // totally didn't write this solely to mess around with macros
+        macro_rules! check {
+            ($path:expr) => {{
+                let path: OsString = ($path).into();
+
+                assert!(fs.lookup(&path).is_some(), concat!(stringify!($path), " could not be looked up"));
+
+                assert_eq!(
+                    fs.lookup(&path).unwrap().0,
+                    fs.lookup_mut(&path).unwrap().0,
+                    concat!(stringify!($path), " differs between immutable and mutable lookups")
+                )
+            }};
+
+            [$path:expr, $($others:expr),*$(,)?] => {{
+                check!($path);
+                check!($($others),+);
+            }};
+        }
+
+        check![
+            "/dir1",
+            "/dir1/dir2",
+            "/dir1/dir2/dir3",
+            "/dir1/dir2/dir3/file1",
+            "dir1",
+            "dir1/dir2",
+            "dir1/dir2/dir3",
+            "dir1/dir2/dir3/file1",
+        ];
+    }
+}
