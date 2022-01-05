@@ -171,19 +171,19 @@ pub struct INodeTable<F> {
 }
 
 impl<F> INodeTable<F> {
-    pub fn add_entry(&mut self, name: OsString, entry: INodeEntry<F>) -> INode {
+    pub fn push_entry<E: IntoINodeEntry<F>>(
+        &mut self,
+        parent: INode,
+        name: OsString,
+        entry: E,
+    ) -> Option<INode> {
         let ino = self.next_open_inode();
-        let parent = self
-            .map
-            .get_mut(&entry.parent.unwrap())
-            .unwrap()
-            .as_dir_mut()
-            .unwrap();
+        let parent_dir = self.map.get_mut(&parent)?.as_dir_mut()?;
 
-        parent.children.insert(name, ino);
-        self.map.insert(ino, entry);
+        parent_dir.children.insert(name, ino);
+        self.map.insert(ino, entry.with_parent(parent));
 
-        ino
+        Some(ino)
     }
 
     pub fn get<T: Into<INode>>(&self, ino: T) -> Option<&INodeEntry<F>> {
