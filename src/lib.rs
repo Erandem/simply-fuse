@@ -140,6 +140,12 @@ pub trait Filesystem {
         Err(Error::NotImplemented)
     }
 
+    /// Reads a directory.
+    ///
+    /// # Warning
+    /// This method **must** include the "." and ".." directories, as well as properly accounting
+    /// for `offset`. If not, some operations may get stuck in an infinite loop while trying to
+    /// read a directory.
     fn readdir(&mut self, _dir: INode, _offset: u64) -> Result<Vec<DirEntry>> {
         Err(Error::NotImplemented)
     }
