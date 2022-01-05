@@ -1,6 +1,7 @@
 pub mod basic;
 
 use std::ffi::{OsStr, OsString};
+use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -153,6 +154,11 @@ pub trait Filesystem {
     fn read(&mut self, _ino: INode, _offset: u64, _size: u32) -> Result<&[u8]> {
         Err(Error::NotImplemented)
     }
+
+    /// Returns the amount of bytes written
+    fn write<T: BufRead>(&mut self, _ino: INode, _offset: u64, _size: u32, _buf: T) -> Result<u32> {
+        Err(Error::NotImplemented)
+    }
 }
 
 #[derive(Debug)]
@@ -181,6 +187,7 @@ impl<T: Filesystem> Runner<T> {
                 Operation::Getattr(op) => self.handle_getattr(&req, op)?,
                 Operation::Readdir(op) => self.handle_readdir(&req, op)?,
                 Operation::Read(op) => self.handle_read(&req, op)?,
+                Operation::Write(op, buf) => self.handle_write(&req, op, buf)?,
                 op => {
                     eprintln!("unimplemented: {:?}", op);
                     req.reply_error(Error::NotImplemented.to_libc_error())?;
@@ -282,6 +289,23 @@ impl<T: Filesystem> Runner<T> {
             }
             Err(e) => {
                 eprintln!("read err: {:#?}", e);
+                req.reply_error(e.to_libc_error())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_write<B: BufRead>(&mut self, req: &Request, op: op::Write<'_>, buf: B) -> Anyhow<()> {
+        match self.fs.write(op.ino().into(), op.offset(), op.size(), buf) {
+            Ok(len) => {
+                let mut rep = reply::WriteOut::default();
+                rep.size(len);
+
+                req.reply(rep)?;
+            }
+            Err(e) => {
+                eprintln!("write err: {:#?}", e);
                 req.reply_error(e.to_libc_error())?;
             }
         }
