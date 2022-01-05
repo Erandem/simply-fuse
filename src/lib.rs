@@ -110,6 +110,9 @@ pub enum Error {
     #[error("No such file or directory exists")]
     NoEntry,
 
+    #[error("Not a file")]
+    NotFile,
+
     #[error("Not a directory")]
     NotDirectory,
 
@@ -121,6 +124,7 @@ impl Error {
     const fn to_libc_error(self) -> i32 {
         match self {
             Self::NoEntry => libc::ENOENT,
+            Self::NotFile => libc::EINVAL, // TODO is this the proper error to return?
             Self::NotDirectory => libc::ENOTDIR,
             Self::NotImplemented => libc::ENOSYS,
         }
