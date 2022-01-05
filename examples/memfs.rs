@@ -5,31 +5,29 @@ use simply_fuse::*;
 use std::ffi::OsStr;
 use std::io::BufRead;
 
+const TEST_MSG: &str = "hello_world!";
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut fs = MemFS::new();
     fs.inodes
-        .add_entry("test".into(), INodeEntry::new_directory(1u64.into(), None));
+        .push_entry(ROOT_INODE, "test".into(), Directory::default());
 
     fs.inodes
-        .add_entry("test2".into(), INodeEntry::new_directory(2u64.into(), None));
+        .push_entry(2u64.into(), "test2".into(), Directory::default());
 
     fs.inodes
-        .add_entry("test3".into(), INodeEntry::new_directory(3u64.into(), None));
+        .push_entry(3u64.into(), "test3".into(), Directory::default());
 
-    fs.inodes.add_entry(
-        "test_root_2".into(),
-        INodeEntry::new_directory(1u64.into(), None),
-    );
+    fs.inodes
+        .push_entry(1u64.into(), "root2".into(), Directory::default());
 
-    fs.inodes.add_entry(
-        "test file".into(),
-        INodeEntry::new_file(
-            1u64.into(),
-            File {
-                data: "Hello, World!".as_bytes().into(),
-                size: "Hello, World!".as_bytes().len(),
-            },
-        ),
+    fs.inodes.push_entry(
+        ROOT_INODE,
+        "file".into(),
+        File {
+            data: TEST_MSG.as_bytes().into(),
+            size: TEST_MSG.as_bytes().len(),
+        },
     );
 
     let mut r = Runner::new(fs, "./mount");

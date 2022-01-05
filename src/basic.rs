@@ -198,8 +198,8 @@ impl<F> INodeTable<F> {
     /// ```
     /// # use simply_fuse::basic::{ROOT_INODE, INodeTable, Directory, INodeEntry};
     /// let mut tbl = INodeTable::<()>::default();
-    /// let test_dir_inode = tbl.add_entry("example directory".into(), INodeEntry::new_directory(ROOT_INODE,
-    /// None));
+    /// let test_dir_inode = tbl.push_entry(ROOT_INODE, "example directory".into(),
+    /// Directory::default()).unwrap();
     ///
     /// let root = tbl.lookup("/").unwrap();
     /// let test_dir = tbl.lookup("example directory").unwrap();
