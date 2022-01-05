@@ -1,3 +1,4 @@
+use simply_fuse::attrs::{FileAttributes, SetFileAttributes};
 use simply_fuse::basic::*;
 use simply_fuse::error::{FSError, FSResult as Result};
 use simply_fuse::*;
