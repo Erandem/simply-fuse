@@ -64,6 +64,10 @@ impl<F> INodeEntry<F> {
         &self.kind
     }
 
+    pub fn kind_mut(&mut self) -> &mut INodeKind<F> {
+        &mut self.kind
+    }
+
     pub fn file_type(&self) -> FileType {
         match self.kind() {
             INodeKind::Directory(_) => FileType::Directory,
@@ -83,7 +87,7 @@ impl<F> INodeEntry<F> {
     }
 
     pub fn as_dir_mut(&mut self) -> Option<&mut Directory> {
-        match &mut self.kind {
+        match self.kind_mut() {
             INodeKind::Directory(dir) => Some(dir),
             _ => None,
         }
@@ -97,7 +101,7 @@ impl<F> INodeEntry<F> {
     }
 
     pub fn as_file_mut(&mut self) -> Option<&mut F> {
-        match &mut self.kind {
+        match self.kind_mut() {
             INodeKind::File(file) => Some(file),
             _ => None,
         }
