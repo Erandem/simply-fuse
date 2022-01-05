@@ -1,0 +1,167 @@
+use simply_fuse::basic::*;
+use simply_fuse::*;
+
+use std::ffi::OsStr;
+use std::io::BufRead;
+
+use anyhow::Result as Anyhow;
+
+fn main() -> Anyhow<()> {
+    let mut fs = MemFS::new();
+    fs.inodes
+        .add_entry("test".into(), INodeEntry::new_directory(1u64.into(), None));
+
+    fs.inodes
+        .add_entry("test2".into(), INodeEntry::new_directory(2u64.into(), None));
+
+    fs.inodes
+        .add_entry("test3".into(), INodeEntry::new_directory(3u64.into(), None));
+
+    fs.inodes.add_entry(
+        "test_root_2".into(),
+        INodeEntry::new_directory(1u64.into(), None),
+    );
+
+    fs.inodes.add_entry(
+        "test file".into(),
+        INodeEntry::new_file(
+            1u64.into(),
+            File {
+                data: "Hello, World!".as_bytes().into(),
+                size: "Hello, World!".as_bytes().len(),
+            },
+        ),
+    );
+
+    let mut r = Runner::new(fs, "./mount");
+    println!("{:#?}", r);
+    r.run_block()?;
+
+    Ok(())
+}
+
+#[derive(Debug, Default)]
+pub struct File {
+    pub data: Vec<u8>,
+    pub size: usize,
+}
+
+impl Filelike for File {
+    fn getattr(&self) -> FileAttributes {
+        FileAttributes::builder()
+            .mode(libc::S_IFREG | 0o755)
+            .size(self.size as u64)
+            .build()
+    }
+}
+
+#[derive(Debug)]
+struct MemFS {
+    inodes: INodeTable<File>,
+}
+
+impl MemFS {
+    fn new() -> MemFS {
+        MemFS {
+            inodes: INodeTable::default(),
+        }
+    }
+}
+
+impl Filesystem for MemFS {
+    fn lookup(&mut self, parent: INode, name: &OsStr) -> Result<Lookup> {
+        let parent = self
+            .inodes
+            .get(parent)
+            .ok_or(Error::NoEntry)
+            .and_then(|x| x.as_dir().ok_or(Error::NotDirectory))?;
+
+        let (child_ino, child) = parent
+            .get(name)
+            // get the inode entry and then map it into (inode, &entry)
+            .and_then(|ino| self.inodes.get(*ino).map(|x| (*ino, x)))
+            .ok_or(Error::NoEntry)?;
+
+        Ok(Lookup::builder()
+            .attributes(child.getattr())
+            .inode(child_ino)
+            .build())
+    }
+
+    fn getattr(&mut self, inode: INode) -> Result<FileAttributes> {
+        let entry = self.inodes.get(inode).ok_or(Error::NoEntry)?;
+
+        Ok(entry.getattr())
+    }
+
+    fn readdir(&mut self, dir_ino: INode, offset: u64) -> Result<Vec<DirEntry>> {
+        let dir_main = self.inodes.get(dir_ino).ok_or(Error::NoEntry)?;
+        let dir = dir_main.as_dir().ok_or(Error::NotDirectory)?;
+
+        let dots = [
+            DirEntry::builder()
+                .name(".".into())
+                .inode(dir_ino)
+                .typ(FileType::Directory)
+                .offset(1)
+                .build(),
+            DirEntry::builder()
+                .name("..".into())
+                .inode(dir_main.parent().unwrap_or(2u64.into()))
+                .typ(FileType::Directory)
+                .offset(2)
+                .build(),
+        ]
+        .into_iter()
+        .map(|x| x.clone());
+
+        Ok(dots
+            .into_iter()
+            .chain(
+                dir.children()
+                    .enumerate()
+                    .map(
+                        |(off, v)| (off + 3, v), // add 3 to skip 0 and the two dots
+                    )
+                    .map(|(offset, (name, inode))| {
+                        DirEntry::builder()
+                            .name(name.clone())
+                            .offset(offset as u64)
+                            .inode(inode)
+                            .typ(self.inodes.get(inode).unwrap().file_type())
+                            .build()
+                    }),
+            )
+            .skip(offset as usize)
+            .collect())
+    }
+
+    fn read(&mut self, ino: INode, offset: u64, size: u32) -> Result<&[u8]> {
+        let file = self.inodes.get(ino).ok_or(Error::NoEntry)?;
+        let file = file.as_file().ok_or(Error::NotFile)?;
+
+        let offset = offset as usize;
+        let size = size as usize;
+
+        let content = file.data.get(offset..).unwrap_or(&[]);
+        let content = &content[..std::cmp::min(file.size, size)];
+
+        Ok(content)
+    }
+
+    fn write<T: BufRead>(&mut self, ino: INode, offset: u64, size: u32, mut buf: T) -> Result<u32> {
+        let file = self.inodes.get_mut(ino).ok_or(Error::NoEntry)?;
+        let file = file.as_file_mut().ok_or(Error::NotFile)?;
+
+        let offset = offset as usize;
+        let size = size as usize;
+
+        file.data.resize(std::cmp::max(file.size, offset + size), 0);
+        buf.read_exact(&mut file.data[offset..offset + size])
+            .unwrap();
+
+        file.size = offset + size;
+
+        Ok(size as u32)
+    }
+}
