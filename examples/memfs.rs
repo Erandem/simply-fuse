@@ -177,7 +177,7 @@ impl Filesystem for MemFS {
         buf.read_exact(&mut file.data[offset..offset + size])
             .unwrap();
 
-        file.attrs = file.attrs.set_size((offset + size) as u64);
+        file.attrs.set_size((offset + size) as u64);
 
         Ok(size as u32)
     }
@@ -185,9 +185,11 @@ impl Filesystem for MemFS {
     fn setattr(&mut self, ino: INode, attrs: SetFileAttributes) -> Result<FileAttributes> {
         let entry = self.inodes.get_mut(ino).ok_or(FSError::NoEntry)?;
 
-        Ok(match entry.kind_mut() {
+        match entry.kind_mut() {
             INodeKind::Directory(dir) => dir.apply_attrs(attrs),
             INodeKind::File(file) => file.attrs.apply_attrs(attrs),
-        })
+        };
+
+        Ok(entry.getattrs())
     }
 }

@@ -21,7 +21,7 @@ pub struct Directory {
 }
 
 impl Directory {
-    pub fn apply_attrs(&mut self, attrs: SetFileAttributes) -> FileAttributes {
+    pub fn apply_attrs(&mut self, attrs: SetFileAttributes) {
         self.attrs.apply_attrs(attrs)
     }
 }

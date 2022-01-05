@@ -80,68 +80,52 @@ impl FileAttributes {
         self.ttl
     }
 
-    pub fn set_mode(mut self, mode: u32) -> FileAttributes {
+    pub fn set_mode(&mut self, mode: u32) {
         self.mode = mode;
-        self
     }
 
-    pub fn set_size(mut self, size: u64) -> FileAttributes {
+    pub fn set_size(&mut self, size: u64) {
         self.size = size;
-        self
     }
 
-    pub fn set_nlink(mut self, nlink: u32) -> FileAttributes {
+    pub fn set_nlink(&mut self, nlink: u32) {
         self.nlink = nlink;
-        self
     }
 
-    pub fn set_uid(mut self, uid: u32) -> FileAttributes {
+    pub fn set_uid(&mut self, uid: u32) {
         self.uid = uid;
-        self
     }
 
-    pub fn set_gid(mut self, gid: u32) -> FileAttributes {
+    pub fn set_gid(&mut self, gid: u32) {
         self.gid = gid;
-        self
     }
 
-    pub fn set_rdev(mut self, rdev: u32) -> FileAttributes {
+    pub fn set_rdev(&mut self, rdev: u32) {
         self.rdev = rdev;
-        self
     }
 
-    pub fn set_blksize(mut self, blksize: u32) -> FileAttributes {
+    pub fn set_blksize(&mut self, blksize: u32) {
         self.blksize = blksize;
-        self
     }
-
-    pub fn set_blocks(mut self, blocks: u64) -> FileAttributes {
+    pub fn set_blocks(&mut self, blocks: u64) {
         self.blocks = blocks;
-        self
     }
 
-    pub fn set_atime(mut self, atime: Duration) -> FileAttributes {
+    pub fn set_atime(&mut self, atime: Duration) {
         self.atime = atime;
-        self
     }
-
-    pub fn set_mtime(mut self, mtime: Duration) -> FileAttributes {
+    pub fn set_mtime(&mut self, mtime: Duration) {
         self.mtime = mtime;
-        self
     }
-
-    pub fn set_ctime(mut self, ctime: Duration) -> FileAttributes {
+    pub fn set_ctime(&mut self, ctime: Duration) {
         self.ctime = ctime;
-        self
     }
-
-    pub fn set_ttl(mut self, ttl: Duration) -> FileAttributes {
+    pub fn set_ttl(&mut self, ttl: Duration) {
         self.ttl = ttl;
-        self
     }
 
     #[deny(unused_variables)]
-    pub fn apply_attrs(&mut self, attrs: SetFileAttributes) -> FileAttributes {
+    pub fn apply_attrs(&mut self, attrs: SetFileAttributes) {
         // Here's a cool trick: By denying unused variables for this function and unpacking the
         // struct below, this function will fail to compile if we update SetFileAttributes without
         // modifying this function. Sure, there's reasons we might want to do that in the future,
@@ -170,8 +154,6 @@ impl FileAttributes {
         copy_attr!(atime);
         copy_attr!(mtime);
         copy_attr!(ctime);
-
-        *self
     }
 }
 
