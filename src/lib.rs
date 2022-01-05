@@ -68,6 +68,36 @@ pub struct SetFileAttributes {
     ctime: Option<Duration>,
 }
 
+impl SetFileAttributes {
+    pub fn mode(&self) -> Option<u32> {
+        self.mode
+    }
+
+    pub fn size(&self) -> Option<u64> {
+        self.size
+    }
+
+    pub fn uid(&self) -> Option<u32> {
+        self.uid
+    }
+
+    pub fn gid(&self) -> Option<u32> {
+        self.gid
+    }
+
+    pub fn atime(&self) -> Option<Duration> {
+        self.atime
+    }
+
+    pub fn mtime(&self) -> Option<Duration> {
+        self.mtime
+    }
+
+    pub fn ctime(&self) -> Option<Duration> {
+        self.ctime
+    }
+}
+
 #[derive(Debug, TypedBuilder)]
 pub struct Lookup {
     attributes: FileAttributes,
@@ -246,7 +276,35 @@ impl<T: Filesystem> Runner<T> {
     }
 
     fn handle_setattr(&mut self, req: &Request, op: op::Setattr<'_>) -> Result<(), PolyfuseError> {
-        match self.fs.setattr(op.ino(), attrs) {
+        let to_duration = |spec: op::SetAttrTime| {
+            use op::SetAttrTime;
+
+            match spec {
+                SetAttrTime::Timespec(dur) => Some(dur),
+                SetAttrTime::Now => Some(std::time::UNIX_EPOCH.elapsed().unwrap()),
+                spec => {
+                    eprintln!(
+                        "Unknown timespec {:#?} encountered. Returning 'None' for now!",
+                        spec
+                    );
+                    None
+                }
+            }
+        };
+
+        let attrs = SetFileAttributes {
+            mode: op.mode(),
+            size: op.size(),
+
+            uid: op.uid(),
+            gid: op.gid(),
+
+            atime: op.atime().and_then(to_duration),
+            mtime: op.mtime().and_then(to_duration),
+            ctime: op.ctime(),
+        };
+
+        match self.fs.setattr(op.ino().into(), attrs) {
             Ok(obj) => {
                 let mut conv: reply::AttrOut = reply::AttrOut::default();
                 conv.attr().ino(op.ino());
