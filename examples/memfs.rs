@@ -122,13 +122,11 @@ impl Filesystem for MemFS {
                 .build(),
             DirEntry::builder()
                 .name("..".into())
-                .inode(dir_main.parent().unwrap_or(2u64.into()))
+                .inode(dir_main.parent().unwrap_or(ROOT_INODE))
                 .typ(FileType::Directory)
                 .offset(2)
                 .build(),
-        ]
-        .into_iter()
-        .map(|x| x.clone());
+        ];
 
         Ok(dots
             .into_iter()
