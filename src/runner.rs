@@ -1,6 +1,6 @@
 use crate::attrs::{FileAttributes, SetFileAttributes};
 use crate::error::{FSError, PolyfuseError, Result};
-use crate::{Filesystem, INode};
+use crate::{Filesystem, INode, SetXAttrFlags};
 
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
@@ -33,6 +33,8 @@ impl<T: Filesystem> Runner<T> {
             match req.operation().map_err(PolyfuseError::DecodeError)? {
                 Operation::Open(op) => self.handle_open(&req, op)?,
                 Operation::Opendir(op) => self.handle_opendir(&req, op)?,
+
+                Operation::Setxattr(op) => self.handle_setxattr(&req, op)?,
 
                 Operation::Lookup(op) => self.handle_lookup(&req, op)?,
                 Operation::Getattr(op) => self.handle_getattr(&req, op)?,
@@ -89,6 +91,38 @@ impl<T: Filesystem> Runner<T> {
             }
             Err(e) => {
                 warn!("opendir error occured: {:#?}", e);
+                req.reply_error(e.to_libc_error())
+                    .map_err(PolyfuseError::ReplyErrError)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_setxattr(
+        &mut self,
+        req: &Request,
+        op: op::Setxattr<'_>,
+    ) -> Result<(), PolyfuseError> {
+        let flags = SetXAttrFlags::from_libc_type(op.flags() as i32)
+            .ok_or_else(|| FSError::InvalidFlags(op.flags() as u32));
+
+        if flags.is_err() {
+            req.reply_error(libc::EINVAL)
+                .map_err(PolyfuseError::ReplyErrError)?;
+
+            return Ok(());
+        }
+
+        match self
+            .fs
+            .setxattr(op.ino().into(), op.name(), op.value(), flags.unwrap())
+        {
+            Ok(_) => {
+                req.reply(()).map_err(PolyfuseError::ReplyError)?;
+            }
+            Err(e) => {
+                warn!("setxattr error occured: {:#?}", e);
                 req.reply_error(e.to_libc_error())
                     .map_err(PolyfuseError::ReplyErrError)?;
             }
