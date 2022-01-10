@@ -111,6 +111,10 @@ pub struct DirEntry {
 }
 
 pub trait Filesystem {
+    fn open(&mut self, _ino: INode, _flags: u32) -> FSResult<OpenFile> {
+        Err(FSError::NotImplemented)
+    }
+
     fn lookup(&mut self, _parent: INode, _name: &OsStr) -> FSResult<Lookup> {
         Err(FSError::NotImplemented)
     }
