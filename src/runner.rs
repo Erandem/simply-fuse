@@ -32,6 +32,8 @@ impl<T: Filesystem> Runner<T> {
         while let Some(req) = session.next_request()? {
             match req.operation().map_err(PolyfuseError::DecodeError)? {
                 Operation::Open(op) => self.handle_open(&req, op)?,
+                Operation::Opendir(op) => self.handle_opendir(&req, op)?,
+
                 Operation::Lookup(op) => self.handle_lookup(&req, op)?,
                 Operation::Getattr(op) => self.handle_getattr(&req, op)?,
                 Operation::Setattr(op) => self.handle_setattr(&req, op)?,
@@ -64,6 +66,29 @@ impl<T: Filesystem> Runner<T> {
             }
             Err(e) => {
                 warn!("open error occured: {:#?}", e);
+                req.reply_error(e.to_libc_error())
+                    .map_err(PolyfuseError::ReplyErrError)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_opendir(&mut self, req: &Request, op: op::Opendir<'_>) -> Result<(), PolyfuseError> {
+        match self.fs.open_dir(op.ino().into(), op.flags()) {
+            Ok(obj) => {
+                let mut res = reply::OpenOut::default();
+
+                res.fh(obj.handle.to_raw());
+                res.direct_io(obj.direct_io);
+                res.keep_cache(obj.keep_cache);
+                res.nonseekable(!obj.seekable);
+                res.cache_dir(obj.cache_dir);
+
+                req.reply(res).map_err(PolyfuseError::ReplyError)?;
+            }
+            Err(e) => {
+                warn!("opendir error occured: {:#?}", e);
                 req.reply_error(e.to_libc_error())
                     .map_err(PolyfuseError::ReplyErrError)?;
             }
