@@ -30,6 +30,7 @@ impl<T: Filesystem> Runner<T> {
 
         while let Some(req) = session.next_request()? {
             match req.operation().map_err(PolyfuseError::DecodeError)? {
+                Operation::Open(op) => self.handle_open(&req, op)?,
                 Operation::Lookup(op) => self.handle_lookup(&req, op)?,
                 Operation::Getattr(op) => self.handle_getattr(&req, op)?,
                 Operation::Setattr(op) => self.handle_setattr(&req, op)?,
@@ -45,6 +46,29 @@ impl<T: Filesystem> Runner<T> {
         }
 
         todo!()
+    }
+
+    fn handle_open(&mut self, req: &Request, op: op::Open<'_>) -> Result<(), PolyfuseError> {
+        match self.fs.open(op.ino().into(), op.flags()) {
+            Ok(obj) => {
+                let mut res = reply::OpenOut::default();
+
+                res.fh(obj.handle.to_raw());
+                res.direct_io(obj.direct_io);
+                res.keep_cache(obj.keep_cache);
+                res.nonseekable(!obj.seekable);
+                res.cache_dir(false); // I think this only works for readdir
+
+                req.reply(res).map_err(PolyfuseError::ReplyError)?;
+            }
+            Err(e) => {
+                eprintln!("open err: {:#?}", e);
+                req.reply_error(e.to_libc_error())
+                    .map_err(PolyfuseError::ReplyErrError)?;
+            }
+        }
+
+        Ok(())
     }
 
     fn handle_lookup(&mut self, req: &Request, op: op::Lookup<'_>) -> Result<(), PolyfuseError> {
