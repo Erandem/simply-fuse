@@ -127,6 +127,38 @@ pub struct DirEntry {
     offset: u64,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SetXAttrFlags {
+    Create,
+    Replace,
+}
+
+impl SetXAttrFlags {
+    pub const fn to_libc_type(self) -> i32 {
+        match self {
+            Self::Create => libc::XATTR_CREATE,
+            Self::Replace => libc::XATTR_REPLACE,
+        }
+    }
+
+    pub const fn from_libc_type(from: i32) -> Option<Self> {
+        let create = from & libc::XATTR_CREATE != 0;
+        let replace = from & libc::XATTR_REPLACE != 0;
+
+        if create && replace {
+            // (false && false) and (true && true)
+            None
+        } else if create {
+            Some(Self::Create)
+        } else if replace {
+            Some(Self::Replace)
+        } else {
+            // I don't think this case would ever actually be called
+            None
+        }
+    }
+}
+
 pub trait Filesystem {
     fn open(&mut self, _ino: INode, _flags: u32) -> FSResult<OpenFile> {
         Err(FSError::NotImplemented)
@@ -145,6 +177,16 @@ pub trait Filesystem {
     }
 
     fn setattr(&mut self, _inode: INode, _attr: SetFileAttributes) -> FSResult<FileAttributes> {
+        Err(FSError::NotImplemented)
+    }
+
+    fn setxattr(
+        &mut self,
+        _ino: INode,
+        _attr_name: &OsStr,
+        _attr_value: &[u8],
+        _flags: SetXAttrFlags,
+    ) -> FSResult<()> {
         Err(FSError::NotImplemented)
     }
 
