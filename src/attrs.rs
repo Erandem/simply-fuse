@@ -141,19 +141,22 @@ impl FileAttributes {
         } = attrs;
 
         // TODO convert this to macro_rules! maybe
-        macro copy_attr($name:ident) {
-            if let Some(attr) = $name {
-                self.$name = attr;
-            }
+        macro_rules! copy_attr {
+            () => {};
+
+            ($attr:ident) => {
+                if let Some(attr) = $attr {
+                    self.$attr = attr;
+                }
+            };
+
+            ($attr:ident, $($tail:tt)*) => {
+                copy_attr!($attr);
+                copy_attr!($($tail)*);
+            };
         }
 
-        copy_attr!(mode);
-        copy_attr!(size);
-        copy_attr!(uid);
-        copy_attr!(gid);
-        copy_attr!(atime);
-        copy_attr!(mtime);
-        copy_attr!(ctime);
+        copy_attr!(mode, size, uid, gid, atime, mtime, ctime);
     }
 }
 
