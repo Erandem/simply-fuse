@@ -48,6 +48,33 @@ pub struct Lookup {
     entry_timeout: Option<Duration>,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Filehandle(u64);
+
+impl Filehandle {
+    pub const fn from_raw(old: u64) -> Self {
+        Self(old)
+    }
+
+    pub const fn to_raw(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Debug, TypedBuilder)]
+pub struct OpenFile {
+    handle: Filehandle,
+
+    #[builder(default = true)]
+    direct_io: bool,
+
+    #[builder(default = false)]
+    keep_cache: bool,
+
+    #[builder(default = true)]
+    seekable: bool,
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum FileType {
     FIFO,
