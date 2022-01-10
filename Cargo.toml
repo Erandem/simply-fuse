@@ -6,7 +6,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Erandem/simply-fuse"
 categories = ["filesystem"]
-tags = ["fuse", "linux"]
+keywords = ["fuse", "linux"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
