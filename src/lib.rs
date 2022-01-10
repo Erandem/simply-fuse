@@ -75,6 +75,23 @@ pub struct OpenFile {
     seekable: bool,
 }
 
+#[derive(Debug, TypedBuilder)]
+pub struct OpenDir {
+    handle: Filehandle,
+
+    #[builder(default = true)]
+    direct_io: bool,
+
+    #[builder(default = false)]
+    keep_cache: bool,
+
+    #[builder(default = true)]
+    seekable: bool,
+
+    #[builder(default = true)]
+    cache_dir: bool,
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum FileType {
     FIFO,
@@ -112,6 +129,10 @@ pub struct DirEntry {
 
 pub trait Filesystem {
     fn open(&mut self, _ino: INode, _flags: u32) -> FSResult<OpenFile> {
+        Err(FSError::NotImplemented)
+    }
+
+    fn open_dir(&mut self, _ino: INode, _flags: u32) -> FSResult<OpenDir> {
         Err(FSError::NotImplemented)
     }
 
