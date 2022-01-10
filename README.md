@@ -1,4 +1,5 @@
 # simply-fuse
+## This library is NOT ready to be used whatsoever!
 
 A fuse library that hopefully makes it a lil bit easier to use :)
 
