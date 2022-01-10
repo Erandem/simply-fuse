@@ -11,6 +11,7 @@ keywords = ["fuse", "linux"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tracing = "0.1"
 polyfuse = "0.4"
 thiserror = "1.0"
 typed-builder = "0.9"

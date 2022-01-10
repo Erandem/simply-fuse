@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 
 use polyfuse::{op, reply, KernelConfig, Operation, Request, Session};
+use tracing::{error, warn};
 
 #[derive(Debug)]
 pub struct Runner<T>
@@ -38,7 +39,7 @@ impl<T: Filesystem> Runner<T> {
                 Operation::Read(op) => self.handle_read(&req, op)?,
                 Operation::Write(op, buf) => self.handle_write(&req, op, buf)?,
                 op => {
-                    eprintln!("unimplemented: {:?}", op);
+                    error!("unimplemented: {:?}", op);
                     req.reply_error(FSError::NotImplemented.to_libc_error())
                         .map_err(PolyfuseError::ReplyErrError)?;
                 }
@@ -62,7 +63,7 @@ impl<T: Filesystem> Runner<T> {
                 req.reply(res).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
-                eprintln!("open err: {:#?}", e);
+                warn!("open error occured: {:#?}", e);
                 req.reply_error(e.to_libc_error())
                     .map_err(PolyfuseError::ReplyErrError)?;
             }
@@ -93,7 +94,7 @@ impl<T: Filesystem> Runner<T> {
                 req.reply(res).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
-                eprintln!("lookup err: {:#?}", e);
+                warn!("lookup error occured: {:#?}", e);
                 req.reply_error(e.to_libc_error())
                     .map_err(PolyfuseError::ReplyErrError)?;
             }
@@ -112,7 +113,7 @@ impl<T: Filesystem> Runner<T> {
                 req.reply(conv).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
-                eprintln!("getattr err: {:#?}", e);
+                warn!("getattr error occured: {:#?}", e);
                 req.reply_error(e.to_libc_error())
                     .map_err(PolyfuseError::ReplyErrError)?;
             }
@@ -128,10 +129,11 @@ impl<T: Filesystem> Runner<T> {
                 SetAttrTime::Timespec(dur) => Some(dur),
                 SetAttrTime::Now => Some(std::time::UNIX_EPOCH.elapsed().unwrap()),
                 spec => {
-                    eprintln!(
-                        "Unknown timespec {:#?} encountered. Returning 'None' for now!",
+                    error!(
+                        "Unknown timespec \"{:#?}\" encountered. Assuming `None` for now!",
                         spec
                     );
+
                     None
                 }
             }
@@ -157,7 +159,7 @@ impl<T: Filesystem> Runner<T> {
                 req.reply(conv).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
-                eprintln!("setattr err: {:#?}", e);
+                warn!("setattr error occured: {:#?}", e);
                 req.reply_error(e.to_libc_error())
                     .map_err(PolyfuseError::ReplyErrError)?;
             }
@@ -196,7 +198,7 @@ impl<T: Filesystem> Runner<T> {
                 req.reply(rep).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
-                eprintln!("readdir err: {:#?}", e);
+                warn!("readdir error occured: {:#?}", e);
                 req.reply_error(e.to_libc_error())
                     .map_err(PolyfuseError::ReplyErrError)?;
             }
@@ -211,7 +213,7 @@ impl<T: Filesystem> Runner<T> {
                 req.reply(data).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
-                eprintln!("read err: {:#?}", e);
+                warn!("read error occured: {:#?}", e);
                 req.reply_error(e.to_libc_error())
                     .map_err(PolyfuseError::ReplyErrError)?;
             }
@@ -234,8 +236,7 @@ impl<T: Filesystem> Runner<T> {
                 req.reply(rep).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
-                eprintln!("write err: {:#?}", e);
-
+                warn!("write error occured: {:#?}", e);
                 req.reply_error(e.to_libc_error())
                     .map_err(PolyfuseError::ReplyErrError)?;
             }
