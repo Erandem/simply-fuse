@@ -38,6 +38,9 @@ pub enum FSError {
 
     #[error("Function not implemented")]
     NotImplemented,
+
+    #[error("Invalid flags passed")]
+    InvalidFlags(u32),
 }
 
 impl FSError {
@@ -47,6 +50,7 @@ impl FSError {
             Self::NotFile => libc::EINVAL, // TODO is this the proper error to return?
             Self::NotDirectory => libc::ENOTDIR,
             Self::NotImplemented => libc::ENOSYS,
+            Self::InvalidFlags(_) => libc::EINVAL,
         }
     }
 }
