@@ -35,6 +35,8 @@ impl<T: Filesystem> Runner<T> {
                 Operation::Opendir(op) => self.handle_opendir(&req, op)?,
 
                 Operation::Setxattr(op) => self.handle_setxattr(&req, op)?,
+                Operation::Getxattr(op) => self.handle_getxattr(&req, op)?,
+                Operation::Listxattr(op) => self.handle_listxattr(&req, op)?,
 
                 Operation::Lookup(op) => self.handle_lookup(&req, op)?,
                 Operation::Getattr(op) => self.handle_getattr(&req, op)?,
@@ -123,6 +125,71 @@ impl<T: Filesystem> Runner<T> {
             }
             Err(e) => {
                 warn!("setxattr error occured: {:#?}", e);
+                req.reply_error(e.to_libc_error())
+                    .map_err(PolyfuseError::ReplyErrError)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_getxattr(
+        &mut self,
+        req: &Request,
+        op: op::Getxattr<'_>,
+    ) -> Result<(), PolyfuseError> {
+        let size = op.size();
+
+        match self.fs.getxattr(op.ino().into(), op.name(), size) {
+            Ok(obj) => {
+                if size == 0 {
+                    // When op.size() == 0, polyfuse wants us to return the length of the attribute
+                    let mut res = reply::XattrOut::default();
+                    res.size(obj.full_len() as u32);
+                    req.reply(res).map_err(PolyfuseError::ReplyError)?;
+                } else {
+                    assert!(
+                        obj.data.len() <= size as usize,
+                        "cannot return data larger than requested"
+                    );
+
+                    req.reply(obj.data).map_err(PolyfuseError::ReplyError)?;
+                }
+            }
+            Err(e) => {
+                warn!("getxattr error occured: {:#?}", e);
+                req.reply_error(e.to_libc_error())
+                    .map_err(PolyfuseError::ReplyErrError)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_listxattr(
+        &mut self,
+        req: &Request,
+        op: op::Listxattr<'_>,
+    ) -> Result<(), PolyfuseError> {
+        let size = op.size();
+
+        match self.fs.listxattrs(op.ino().into(), size) {
+            Ok(obj) => {
+                if size == 0 {
+                    let mut res = reply::XattrOut::default();
+                    res.size(obj.1);
+                    req.reply(res).map_err(PolyfuseError::ReplyError)?;
+                } else {
+                    debug_assert!(
+                        obj.0.len() <= size as usize,
+                        "returned string larger than the buffer size"
+                    );
+
+                    req.reply(obj.0).map_err(PolyfuseError::ReplyError)?;
+                }
+            }
+            Err(e) => {
+                warn!("listxattr error occured: {:#?}", e);
                 req.reply_error(e.to_libc_error())
                     .map_err(PolyfuseError::ReplyErrError)?;
             }

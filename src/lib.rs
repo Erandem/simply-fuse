@@ -159,6 +159,30 @@ impl SetXAttrFlags {
     }
 }
 
+/// Acts as a reference to an xattr, containing a slice for the requested data along with the
+/// length of its data source.
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct XAttrRef<'a> {
+    /// Represents the actual, full size of `data`. This is not the same as `data.len()`, but
+    /// rather then length of the origianl source of the slice.
+    full_len: usize,
+    data: &'a [u8],
+}
+
+impl<'a> XAttrRef<'a> {
+    pub fn new(data: &'a [u8], full_len: usize) -> XAttrRef<'a> {
+        XAttrRef { full_len, data }
+    }
+
+    pub fn full_len(&self) -> usize {
+        self.full_len
+    }
+
+    pub fn data(&self) -> &[u8] {
+        self.data
+    }
+}
+
 pub trait Filesystem {
     fn open(&mut self, _ino: INode, _flags: u32) -> FSResult<OpenFile> {
         Err(FSError::NotImplemented)
@@ -187,6 +211,27 @@ pub trait Filesystem {
         _attr_value: &[u8],
         _flags: SetXAttrFlags,
     ) -> FSResult<()> {
+        Err(FSError::NotImplemented)
+    }
+
+    /// When `max_len` == 0, this is functionally requesting only the length of the requested
+    /// attribute.
+    fn getxattr(
+        &mut self,
+        _ino: INode,
+        _attr_name: &OsStr,
+        _max_len: u32,
+    ) -> FSResult<XAttrRef<'_>> {
+        Err(FSError::NotImplemented)
+    }
+
+    /// When `max_len` is 0, the return value should be an empty string and the length of all the
+    /// attributes with an additional nul byte.
+    ///
+    /// When `max_len` is greater than 0, this function should return an `OsString` composed of all
+    /// the xattr names seperated by a nul (\0) byte. If the length of that string is less than
+    /// `max_len`, however, the method should error and return `FSError::BufferWouldOverflow`.
+    fn listxattrs(&mut self, _ino: INode, _max_len: u32) -> FSResult<(OsString, u32)> {
         Err(FSError::NotImplemented)
     }
 

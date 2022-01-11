@@ -41,6 +41,9 @@ pub enum FSError {
 
     #[error("Invalid flags passed")]
     InvalidFlags(u32),
+
+    #[error("Buffer would overflow")]
+    BufferWouldOverflow,
 }
 
 impl FSError {
@@ -51,6 +54,7 @@ impl FSError {
             Self::NotDirectory => libc::ENOTDIR,
             Self::NotImplemented => libc::ENOSYS,
             Self::InvalidFlags(_) => libc::EINVAL,
+            Self::BufferWouldOverflow => libc::ERANGE,
         }
     }
 }
