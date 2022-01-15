@@ -1,6 +1,6 @@
 use crate::attrs::{FileAttributes, SetFileAttributes};
 use crate::error::{FSError, PolyfuseError, Result};
-use crate::{Filesystem, INode, SetXAttrFlags};
+use crate::{Filesystem, INode, Lookup, SetXAttrFlags};
 
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
@@ -8,6 +8,55 @@ use std::thread::JoinHandle;
 
 use polyfuse::{op, reply, KernelConfig, Operation, Request, Session};
 use tracing::{error, warn};
+
+impl Lookup {
+    fn apply_attrs_to(&self, attrs: &mut reply::FileAttr) {
+        self.attributes.copy_attrs_to(self.inode, attrs);
+    }
+}
+
+impl FileAttributes {
+    /// Copies the attributes from our own `FileAttributes` to a polyfuse `FileAttr`.
+    fn copy_attrs_to(&self, ino: INode, attrs: &mut reply::FileAttr) {
+        attrs.ino(ino.to_u64());
+
+        attrs.size(self.size());
+        attrs.mode(self.mode());
+        attrs.nlink(self.nlink());
+        attrs.uid(self.uid());
+        attrs.gid(self.gid());
+        attrs.rdev(self.rdev());
+        attrs.blksize(self.blksize());
+        attrs.blocks(self.blocks());
+
+        attrs.atime(self.atime());
+        attrs.mtime(self.mtime());
+        attrs.ctime(self.ctime());
+    }
+}
+
+impl From<Lookup> for reply::EntryOut {
+    fn from(val: Lookup) -> Self {
+        let mut out = reply::EntryOut::default();
+        out.ino(val.inode.to_u64());
+
+        if let Some(x) = val.generation {
+            out.generation(x)
+        }
+
+        if let Some(x) = val.attr_timeout {
+            out.ttl_attr(x)
+        }
+
+        if let Some(x) = val.entry_timeout {
+            out.ttl_entry(x)
+        }
+
+        val.apply_attrs_to(out.attr());
+
+        out
+    }
+}
 
 #[derive(Debug)]
 pub struct Runner<T>
@@ -201,22 +250,8 @@ impl<T: Filesystem> Runner<T> {
     fn handle_lookup(&mut self, req: &Request, op: op::Lookup<'_>) -> Result<(), PolyfuseError> {
         match self.fs.lookup(op.parent().into(), op.name()) {
             Ok(obj) => {
-                let mut res = reply::EntryOut::default();
-                res.ino(obj.inode.to_u64());
+                let res = reply::EntryOut::from(obj);
 
-                if let Some(generation) = obj.generation {
-                    res.generation(generation)
-                }
-
-                if let Some(attr_timeout) = obj.attr_timeout {
-                    res.ttl_attr(attr_timeout);
-                }
-
-                if let Some(entry_timeout) = obj.entry_timeout {
-                    res.ttl_entry(entry_timeout);
-                }
-
-                self.copy_file_attr(&obj.attributes, obj.inode, res.attr());
                 req.reply(res).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
@@ -232,10 +267,10 @@ impl<T: Filesystem> Runner<T> {
         match self.fs.getattr(op.ino().into()) {
             Ok(obj) => {
                 let mut conv: reply::AttrOut = reply::AttrOut::default();
-                conv.attr().ino(op.ino()); // FileAttribute does not keep the inode
-                conv.ttl(obj.ttl());
 
-                self.copy_file_attr(&obj, op.ino().into(), conv.attr());
+                conv.ttl(obj.ttl());
+                obj.copy_attrs_to(op.ino().into(), conv.attr());
+
                 req.reply(conv).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
@@ -278,10 +313,10 @@ impl<T: Filesystem> Runner<T> {
         match self.fs.setattr(op.ino().into(), attrs) {
             Ok(obj) => {
                 let mut conv: reply::AttrOut = reply::AttrOut::default();
-                conv.attr().ino(op.ino());
-                conv.ttl(obj.ttl());
 
-                self.copy_file_attr(&obj, op.ino().into(), conv.attr());
+                conv.ttl(obj.ttl());
+                obj.copy_attrs_to(op.ino().into(), conv.attr());
+
                 req.reply(conv).map_err(PolyfuseError::ReplyError)?;
             }
             Err(e) => {
@@ -369,24 +404,6 @@ impl<T: Filesystem> Runner<T> {
         }
 
         Ok(())
-    }
-
-    /// Copies the attributes from a `FileAttribute` plus inode to a polyfuse `FileAttr`
-    /// Passing the inode is required as `FileAttribute`s do not keep track of the inodes
-    fn copy_file_attr(&self, from: &FileAttributes, inode: INode, to: &mut reply::FileAttr) {
-        to.ino(inode.to_u64());
-
-        to.mode(from.mode());
-        to.size(from.size());
-        to.nlink(from.nlink());
-        to.uid(from.uid());
-        to.gid(from.gid());
-        to.rdev(from.rdev());
-        to.blksize(from.blksize());
-        to.blocks(from.blocks());
-        to.atime(from.atime());
-        to.mtime(from.mtime());
-        to.ctime(from.ctime());
     }
 }
 
