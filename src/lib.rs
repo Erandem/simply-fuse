@@ -214,7 +214,7 @@ pub trait Filesystem {
         Err(FSError::NotImplemented)
     }
 
-    /// When `max_len` == 0, this is functionally requesting only the length of the requested
+    /// When `max_len == 0`, this is functionally requesting only the length of the requested
     /// attribute.
     fn getxattr(
         &mut self,
@@ -229,7 +229,7 @@ pub trait Filesystem {
     /// attributes with an additional nul byte.
     ///
     /// When `max_len` is greater than 0, this function should return an `OsString` composed of all
-    /// the xattr names seperated by a nul (\0) byte. If the length of that string is less than
+    /// the xattr names seperated by a nul (\0) byte. If the length of that string is greater than
     /// `max_len`, however, the method should error and return `FSError::BufferWouldOverflow`.
     fn listxattrs(&mut self, _ino: INode, _max_len: u32) -> FSResult<(OsString, u32)> {
         Err(FSError::NotImplemented)
