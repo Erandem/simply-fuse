@@ -192,6 +192,24 @@ pub trait Filesystem {
         Err(FSError::NotImplemented)
     }
 
+    fn make_node(
+        &mut self,
+        _parent: INode,
+        _name: &OsStr,
+        _mode: u32,
+        _rdev: u32,
+    ) -> FSResult<Lookup> {
+        Err(FSError::NotImplemented)
+    }
+
+    fn make_dir(&mut self, _parent: INode, _name: &OsStr, _mode: u32) -> FSResult<Lookup> {
+        Err(FSError::NotImplemented)
+    }
+
+    fn make_symlink(&mut self, _parent: INode, _name: &OsStr, _link: &OsStr) -> FSResult<Lookup> {
+        Err(FSError::NotImplemented)
+    }
+
     fn lookup(&mut self, _parent: INode, _name: &OsStr) -> FSResult<Lookup> {
         Err(FSError::NotImplemented)
     }

@@ -87,6 +87,9 @@ impl<T: Filesystem> Runner<T> {
                 Operation::Getxattr(op) => self.handle_getxattr(&req, op)?,
                 Operation::Listxattr(op) => self.handle_listxattr(&req, op)?,
 
+                Operation::Mknod(op) => self.handle_mknod(&req, op)?,
+                Operation::Mkdir(op) => self.handle_mkdir(&req, op)?,
+
                 Operation::Lookup(op) => self.handle_lookup(&req, op)?,
                 Operation::Getattr(op) => self.handle_getattr(&req, op)?,
                 Operation::Setattr(op) => self.handle_setattr(&req, op)?,
@@ -239,6 +242,40 @@ impl<T: Filesystem> Runner<T> {
             }
             Err(e) => {
                 warn!("listxattr error occured: {:#?}", e);
+                req.reply_error(e.to_libc_error())
+                    .map_err(PolyfuseError::ReplyErrError)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_mknod(&mut self, req: &Request, op: op::Mknod<'_>) -> Result<(), PolyfuseError> {
+        let parent = op.parent().into();
+
+        match self.fs.make_node(parent, op.name(), op.mode(), op.rdev()) {
+            Ok(obj) => {
+                let res = reply::EntryOut::from(obj);
+                req.reply(res).map_err(PolyfuseError::ReplyError)?;
+            }
+            Err(e) => {
+                warn!("mknod error occured: {:#?}", e);
+                req.reply_error(e.to_libc_error())
+                    .map_err(PolyfuseError::ReplyErrError)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_mkdir(&mut self, req: &Request, op: op::Mkdir<'_>) -> Result<(), PolyfuseError> {
+        match self.fs.make_dir(op.parent().into(), op.name(), op.mode()) {
+            Ok(obj) => {
+                let res = reply::EntryOut::from(obj);
+                req.reply(res).map_err(PolyfuseError::ReplyError)?;
+            }
+            Err(e) => {
+                warn!("mkdir error occured: {:#?}", e);
                 req.reply_error(e.to_libc_error())
                     .map_err(PolyfuseError::ReplyErrError)?;
             }
