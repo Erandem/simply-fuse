@@ -256,6 +256,11 @@ impl<F> INodeTable<F> {
             .map(|x| (inode.unwrap(), x))
     }
 
+    /// Forcibly deletes an inode, returning the former entry.
+    pub fn delete_inode(&mut self, ino: INode) -> Option<INodeEntry<F>> {
+        self.map.remove(&ino)
+    }
+
     fn next_open_inode(&mut self) -> INode {
         let ino = self.cur_ino;
         self.cur_ino = ino.next_inode();
