@@ -24,6 +24,21 @@ impl Directory {
     pub fn apply_attrs(&mut self, attrs: SetFileAttributes) {
         self.attrs.apply_attrs(attrs)
     }
+
+    /// Removes the specifies child and returns its inode, if it exists
+    pub fn remove_child(&mut self, name: &OsStr) -> Option<INode> {
+        self.children.remove(name)
+    }
+
+    pub fn get(&self, name: &OsStr) -> Option<INode> {
+        self.children.get(name).copied()
+    }
+
+    pub fn children(&self) -> DirIter<'_> {
+        DirIter {
+            iter: self.children.iter(),
+        }
+    }
 }
 
 impl Default for Directory {
@@ -41,18 +56,6 @@ impl Default for Directory {
 impl Attributable for Directory {
     fn getattrs(&self) -> FileAttributes {
         self.attrs
-    }
-}
-
-impl Directory {
-    pub fn get(&self, name: &OsStr) -> Option<INode> {
-        self.children.get(name).map(|x| *x)
-    }
-
-    pub fn children(&self) -> DirIter<'_> {
-        DirIter {
-            iter: self.children.iter(),
-        }
     }
 }
 
