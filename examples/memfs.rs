@@ -94,7 +94,7 @@ impl Filesystem for MemFS {
         let (child_ino, child) = parent
             .get(name)
             // get the inode entry and then map it into (inode, &entry)
-            .and_then(|ino| self.inodes.get(*ino).map(|x| (*ino, x)))
+            .and_then(|ino| self.inodes.get(ino).map(|x| (ino, x)))
             .ok_or(FSError::NoEntry)?;
 
         Ok(Lookup::builder()

@@ -45,8 +45,8 @@ impl Attributable for Directory {
 }
 
 impl Directory {
-    pub fn get(&self, name: &OsStr) -> Option<&INode> {
-        self.children.get(name)
+    pub fn get(&self, name: &OsStr) -> Option<INode> {
+        self.children.get(name).map(|x| *x)
     }
 
     pub fn children(&self) -> DirIter<'_> {
@@ -232,7 +232,7 @@ impl<F> INodeTable<F> {
             match path_str.as_ref() {
                 "/" if parent_ino == ROOT_INODE => continue, // path starts with "/"
                 _ => {
-                    parent_ino = *parent.as_dir()?.get(path.as_os_str())?;
+                    parent_ino = parent.as_dir()?.get(path.as_os_str())?;
                     parent = self.get(parent_ino)?;
                 }
             }
